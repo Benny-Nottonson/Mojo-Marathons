@@ -1,12 +1,13 @@
-from src import Matrix, Type, test_matmul, bench_matmul
+from src import Matrix, Type, Width, test_matmul, bench_matmul
+from algorithm import vectorize
 
-fn basic_matmul[M: Int, N: Int, K: Int, //](inout res: Matrix[Type, M, N], a: Matrix[Type, M, K], b: Matrix[Type, K, N]) -> None:
-    for y in range(N):
-        for x in range(M):
-            var sum: Scalar[Type] = 0
-            for k in range(K):
-                sum += a[x, k] * b[k, y]
-            res[x, y] += sum
+fn matmul[M: Int, N: Int, K: Int, //](inout res: Matrix[Type, M, N], a: Matrix[Type, M, K], b: Matrix[Type, K, N]):
+    for m in range(N):
+        for k in range(K):
+            for n in range(M):
+                res[m, n] += a[m, k] * b[k, n]
 
-fn main():
-    bench_matmul[basic_matmul, 256]()
+
+fn main() raises:
+    test_matmul[matmul]()
+    bench_matmul[matmul, 1024]()

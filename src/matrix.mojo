@@ -5,6 +5,7 @@ struct Matrix[Type: DType, Width: Int, Height: Int]:
     @always_inline("nodebug")
     fn __init__(inout self):
         self.data = DTypePointer[Type].alloc(Self.elements)
+        memset_zero[Type](self.data, Self.elements)
 
     @always_inline("nodebug")
     fn __init__(inout self, owned data: DTypePointer[Type]):
@@ -47,11 +48,10 @@ struct Matrix[Type: DType, Width: Int, Height: Int]:
     fn simd_store[Width: Int](inout self, x: Int, y: Int, value: SIMD[Type, Width]):
         self.data.store[width=Width](y * Width + x, value)
 
+    @staticmethod
     @always_inline("nodebug")
-    fn matmul[K: Int, //](inout self, a: Matrix[Type, Width, K], b: Matrix[Type, K, Height]):
-        for y in range(Height):
-            for x in range(Width):
-                var sum: Scalar[Type] = 0
-                for k in range(K):
-                    sum += a[x, k] * b[k, y]
-                self[x, y] += sum
+    fn matmul[K: Int, //](inout res: Matrix[Type, Width, Height], a: Matrix[Type, Width, K], b: Matrix[Type, K, Height]):
+        for m in range(Height):
+            for k in range(K):
+                for n in range(Width):
+                    res[m, n] += a[m, k] * b[k, n]
