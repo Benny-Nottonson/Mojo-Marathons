@@ -1,15 +1,12 @@
-from src import Tensor, TensorShape, Type
-from src.testing import bench_matmul
+from src import Matrix, Type, test_matmul, bench_matmul
 
-@parameter
-@always_inline("nodebug")
-fn matmul[
-    t1_shape: TensorShape, t2_shape: TensorShape
-](inout res: Tensor[Type], t1: Tensor[Type], t2: Tensor[Type]):
-    for i in range(t1_shape[0]):
-        for j in range(t2_shape[1]):
-            for k in range(t1_shape[1]):
-                res[i * t2_shape[1] + j] += t1[i * t1_shape[1] + k] * t2[k * t2_shape[1] + j]
+fn basic_matmul[M: Int, N: Int, K: Int, //](inout res: Matrix[Type, M, N], a: Matrix[Type, M, K], b: Matrix[Type, K, N]) -> None:
+    for y in range(N):
+        for x in range(M):
+            var sum: Scalar[Type] = 0
+            for k in range(K):
+                sum += a[x, k] * b[k, y]
+            res[x, y] += sum
 
 fn main():
-    bench_matmul[matmul]()
+    bench_matmul[basic_matmul, 256]()
