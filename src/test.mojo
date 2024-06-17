@@ -1,4 +1,5 @@
 from testing import assert_almost_equal
+from benchmark import clobber_memory
 from algorithm import vectorize
 from time import now
 
@@ -47,14 +48,8 @@ fn test_matmul[MatMul: MatmulSignature]() raises:
         MatMul(res, a, b)
         basic_matmul(correct, a, b)
 
-        for m in range(M):
-            for n in range(N):
-                assert_almost_equal(res[m, n], correct[m, n], atol=1e-5)
-
-        a.data.free()
-        b.data.free()
-        correct.data.free()
-        res.data.free()
+        for i in range(M * N):
+            assert_almost_equal(res.data[i], correct.data[i], atol=1e-5)
 
         print("✅ Passed test with M =", M, ", N =", N, ", K =", K)
 
@@ -64,18 +59,16 @@ fn bench_matmul[MatMul: MatmulSignature]() raises:
     var a = Matrix[Type, TestSize, TestSize].rand()
     var b = Matrix[Type, TestSize, TestSize].rand()
 
-    alias GFlop = 2 * TestSize * TestSize * TestSize
     var start: Int
     var end: Int
 
     while True:
+        clobber_memory()
+
         start = now()
         MatMul(res, a, b)
         end = now()
 
-        var elapsed = end - start
-        var gflop = GFlop / elapsed
-
-        print("GFlop/s:", gflop)
+        print("GFlop/s:", TestSize ** 3 * 2 / (end - start))
 
         memset_zero[Type](res.data, res.Elements)

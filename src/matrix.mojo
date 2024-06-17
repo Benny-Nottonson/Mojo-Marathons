@@ -22,6 +22,10 @@ struct Matrix[Type: DType, Rows: Int, Cols: Int]:
         self.data = data
 
     @always_inline("nodebug")
+    fn __del__(owned self):
+        self.data.free()
+
+    @always_inline("nodebug")
     fn __getitem__(self, y: Int, x: Int) -> Scalar[Type]:
         return self.load[1](y, x)
 
