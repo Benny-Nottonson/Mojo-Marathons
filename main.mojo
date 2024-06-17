@@ -1,4 +1,4 @@
-from src import Matrix, Type, Width, test_matmul, bench_matmul
+from src import Matrix, Type, Nelts, test_matmul, bench_matmul
 from algorithm import vectorize
 
 fn matmul[M: Int, N: Int, K: Int, //](inout res: Matrix[Type, M, N], a: Matrix[Type, M, K], b: Matrix[Type, K, N]):
@@ -7,7 +7,6 @@ fn matmul[M: Int, N: Int, K: Int, //](inout res: Matrix[Type, M, N], a: Matrix[T
             for n in range(N):
                 res[m, n] += a[m, k] * b[k, n]
 
-
 fn main() raises:
-    test_matmul[matmul]()
-    bench_matmul[matmul, 1024]()
+    # test_matmul[matmul]()
+    bench_matmul[matmul]()

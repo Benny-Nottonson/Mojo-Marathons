@@ -1,7 +1,4 @@
-from utils import StaticTuple
-from random import rand
 from testing import assert_almost_equal
-from benchmark import keep, clobber_memory
 from time import now
 
 alias SCENARIOS = [
@@ -20,11 +17,9 @@ alias SCENARIOS = [
 
 fn basic_matmul[Type: DType, M: Int, N: Int, K: Int](inout res: Matrix[Type, M, N], a: Matrix[Type, M, K], b: Matrix[Type, K, N]):
     for m in range(M):
-        for n in range(N):
-            var sum: Scalar[Type] = 0
-            for k in range(K):
-                sum += a[m, k] * b[k, n]
-            res[m, n] += sum
+        for k in range(K):
+            for n in range(N):
+                res[m, n] += a[m, k] * b[k, n]
 
 
 fn test_matmul[MatMul: MatmulSignature]() raises:
@@ -38,13 +33,8 @@ fn test_matmul[MatMul: MatmulSignature]() raises:
 
         var correct = Matrix[Type, M, N]()
         var res = Matrix[Type, M, N]()
-        var a = Matrix[Type, M, K]()
-        var b = Matrix[Type, K, N]()
-
-        rand[Type](a.data, a.elements)
-        rand[Type](b.data, b.elements)
-        memset_zero[Type](res.data, res.elements)
-        memset_zero[Type](correct.data, correct.elements)
+        var a = Matrix[Type, M, K].rand()
+        var b = Matrix[Type, K, N].rand()
 
         MatMul(res, a, b)
         basic_matmul(correct, a, b)
@@ -53,21 +43,21 @@ fn test_matmul[MatMul: MatmulSignature]() raises:
             for n in range(N):
                 assert_almost_equal(res[m, n], correct[m, n], atol=1e-5)
 
+        a.data.free()
+        b.data.free()
+        correct.data.free()
+        res.data.free()
+
         print("✅ Passed test with M =", M, ", N =", N, ", K =", K)
 
-fn bench_matmul[MatMul: MatmulSignature, Size: Int]() raises:
-    var res = Matrix[Type, Size, Size]()
-    var a = Matrix[Type, Size, Size]()
-    var b = Matrix[Type, Size, Size]()
+fn bench_matmul[MatMul: MatmulSignature]() raises:
+    var res = Matrix[Type, TestSize, TestSize]()
+    var a = Matrix[Type, TestSize, TestSize].rand()
+    var b = Matrix[Type, TestSize, TestSize].rand()
 
-    rand[Type](a.data, a.elements)
-    rand[Type](b.data, b.elements)
-
-    alias GFlop = 2 * Size * Size * Size
+    alias GFlop = 2 * TestSize * TestSize * TestSize
     var start: Int
     var end: Int
-
-    clobber_memory()
 
     while True:
         start = now()
