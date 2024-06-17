@@ -1,4 +1,5 @@
 from testing import assert_almost_equal
+from algorithm import vectorize
 from time import now
 
 alias SCENARIOS = [
@@ -15,11 +16,14 @@ alias SCENARIOS = [
     StaticIntTuple[3](1024, 1024, 512)                  # Large matrix with smaller dimensions
 ]
 
-fn basic_matmul[Type: DType, M: Int, N: Int, K: Int](inout res: Matrix[Type, M, N], a: Matrix[Type, M, K], b: Matrix[Type, K, N]):
-    for m in range(M):
-        for k in range(K):
-            for n in range(N):
-                res[m, n] += a[m, k] * b[k, n]
+@always_inline("nodebug")
+fn basic_matmul[Type: DType, M: Int, N: Int, K: Int](inout C: Matrix[Type, M, N], A: Matrix[Type, M, K], B: Matrix[Type, K, N]):
+    for m in range(C.Rows):
+        for k in range(A.Cols):
+            @parameter
+            fn dot[Nelts: Int](n: Int):
+                C.store(m, n, B.load[Nelts](k, n).fma(A[m, k], C.load[Nelts](m, n)))
+            vectorize[dot, Nelts, size=N]()
 
 
 fn test_matmul[MatMul: MatmulSignature]() raises:
@@ -68,4 +72,5 @@ fn bench_matmul[MatMul: MatmulSignature]() raises:
         var gflop = GFlop / elapsed
 
         print("GFlop/s:", gflop)
-        memset_zero[Type](res.data, res.elements)
+
+        memset_zero[Type](res.data, res.Elements)
