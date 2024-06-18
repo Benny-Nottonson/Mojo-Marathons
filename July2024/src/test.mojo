@@ -35,7 +35,7 @@ fn test_matmul[MatMul: MatmulSignature]() raises:
     @parameter
     for i in range(len(SCENARIOS)):
         alias SCENARIO = SCENARIOS.get[i, StaticIntTuple[3]]()
-
+        
         alias M = SCENARIO[0]
         alias N = SCENARIO[1]
         alias K = SCENARIO[2]
