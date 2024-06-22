@@ -48,6 +48,7 @@
 
 <ul>
   <li>Final judging will use an internal test suite of different types and sizes</li>
+  <li>Compilation time must be under one minute </li>
   <li>Types will be both float and int, with varying width</li>
   <li>Sizes will range from 1 -> 4096</li>
   <li>Matrices will be both square and nonsquare</li>
