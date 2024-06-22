@@ -23,7 +23,7 @@
 <ol>
   <li>Fork this repository to get started.</li>
   <li>Navigate to the <code>./src</code> directory where you'll find the provided framework and <code>Matrix</code> struct.</li>
-  <li>Duplicate `main.mojo` and rename the file to your github username: `github-username.mojo`, then submit your solution via a Pull Request (PR) by the last day of the month.</li>
+  <li>Duplicate <code>main.mojo</code> and rename the file to your github username: <code>github-username.mojo</code>, then submit your solution via a Pull Request (PR) by the last day of the month.</li>
 </ol>
 
 <p align="center">
