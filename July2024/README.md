@@ -46,6 +46,16 @@
   <li>🏅 <strong>Exclusive Merch</strong> sent from Modular</li>
 </ul>
 
+## 🧑‍⚖️ Judging Criteria
+
+<ul>
+  <li>Final judging will use an internal test suite of different types and sizes</li>
+  <li>Types will be both float and int, with varying width</li>
+  <li>Sizes will range from 1 -> 4096</li>
+  <li>Matrices will be both square and nonsquare</li>
+  <li>The winner will be determined by highest GFlops, or community decision if it is ambiguous</li>
+</ul>
+
 ## 📢 How to Participate
 
 <ol>
