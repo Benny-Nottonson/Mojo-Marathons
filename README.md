@@ -1,24 +1,60 @@
 # Mojo Marathons 🔥
 
-A monthly competition for the best Mojicians to showcase their skills and push Mojo to its limits, with prizes and recognition for winners!
+<p align="center">
+  <img src="https://github.com/Benny-Nottonson/Mojo-Marathons/assets/112336374/36152a95-bc13-4a16-a11b-99b4fe5ee2de" alt="MojoMarathons" width="300">
+</p>
 
-Mojo Marathons are Modular recognized and sponsored, currently hosted by @Benny-Nottonson. Any suggestions for contests, rule changes, or questions can be directed to @benny.n on discord. 
+<p align="center">
+  <strong>Welcome to <span style="color: #ff4500;">Mojo Marathons</span></strong>, a monthly competition where the best Mojicians showcase their skills and push Mojo to its limits. Compete for prizes and recognition! 🏆
+</p>
 
-These marathons are intended to push the community to build together, and will ideally be focused on ML and AI topics. 
+<p align="center">
+  Mojo Marathons are recognized and sponsored by <strong>Modular</strong>, and currently hosted by <a href="https://github.com/Benny-Nottonson">@Benny-Nottonson</a>. For suggestions, rule changes, or questions, reach out to <strong>@benny.n</strong> on Discord.
+</p>
 
-## Rules & Regulations
+<p align="center">
+  These marathons aim to foster community collaboration, focusing on ML and AI topics. 🤖
+</p>
 
-All final verdicts will be decided by the community, if there is a vote needed to arbitrate a  decision, it will be called through the discussions. 
+## 📜 Rules & Regulations
 
-The current rules are as follows
+<p align="center">
+  All final decisions will be made by the community. If a vote is needed, it will be conducted through discussions.
+</p>
 
-- All code must be written purely in Mojo
-- All dependencies must be from only the stdlib (i.e. no dependencies)
-- Using MLIR / External Calls will be judged case by case
-- Submissions will be accepted as novel only if they represent tangible differences
+### Current Rules
 
-These rules are intended to push programmers to rely only on core language features, and present real and practical changes to top solutions.
+<ul>
+  <li>📝 All code must be written purely in <strong>Mojo</strong>.</li>
+  <li>📦 Dependencies must be limited to the <strong>standard library</strong> (i.e., no external dependencies).</li>
+  <li>🔍 Use of <strong>MLIR / External Calls</strong> will be judged on a case-by-case basis.</li>
+  <li>🌟 Submissions will be considered novel only if they represent tangible differences.</li>
+</ul>
 
-## History
+<p align="center">
+  These rules encourage programmers to rely on core language features and present real, practical improvements to top solutions.
+</p>
 
-- July 2024 - Matrix Multiplication
+## 📅 History
+
+<ul>
+  <li><strong>July 2024</strong> - Matrix Multiplication</li>
+</ul>
+
+## 🏅 Prizes
+
+<ul>
+  <li>🎖️ <strong>Recognition</strong> in the community</li>
+  <li>🏅 <strong>Exclusive Merch</strong> sent from Modular</li>
+</ul>
+
+## 📢 How to Participate
+
+<ol>
+  <li>Fork this repository and create your solution.</li>
+  <li>Submit your solution <strong>via PR</strong> by the <strong>last day of the month</strong>.</li>
+</ol>
+<br />
+<p align="center">
+  We look forward to seeing your innovative solutions! 🚀
+</p>
