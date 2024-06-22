@@ -23,9 +23,7 @@
 <ol>
   <li>Fork this repository to get started.</li>
   <li>Navigate to the <code>./src</code> directory where you'll find the provided framework and <code>Matrix</code> struct.</li>
-  <li>Modify <code>main.mojo</code> to implement your optimized matrix multiplication algorithm.</li>
-  <li>Run the provided tests and benchmarks to ensure your solution is correct and efficient.</li>
-  <li>Submit your solution via a Pull Request (PR) by the last day of the month.</li>
+  <li>Duplicate `main.mojo` and rename the file to your github username: `github-username.mojo`, then submit your solution via a Pull Request (PR) by the last day of the month.</li>
 </ol>
 
 <p align="center">
