@@ -29,6 +29,7 @@
   <li>📦 Dependencies must be limited to the <strong>standard library</strong> (i.e., no external dependencies).</li>
   <li>🔍 Use of <strong>MLIR / External Calls</strong> will be judged on a case-by-case basis.</li>
   <li>🌟 Submissions will be considered novel only if they represent tangible differences.</li>
+  <li>🤖 Do not modify anything in ./src, all changes should be in the respective month folder.</li>
 </ul>
 
 <p align="center">
