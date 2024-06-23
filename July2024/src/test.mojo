@@ -60,14 +60,19 @@ fn bench_matmul[MatMul: MatmulSignature]() raises:
 
     var start: Int
     var end: Int
+    var t: Float64 = 0
 
-    while True:
+    for _ in range(100):
         clobber_memory()
 
         start = now()
         MatMul(res, a, b)
         end = now()
 
-        print("GFlop/s:", TestSize ** 3 * 2 / (end - start))
+        var GFlops = TestSize ** 3 * 2 / (end - start)
+        t += GFlops
+        print("GFlop/s:", GFlops)
 
         memset_zero[Type](res.data, res.Elements)
+    
+    print("Average GFlop/s:", t / 100)
