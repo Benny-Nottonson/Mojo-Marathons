@@ -62,7 +62,7 @@ fn bench_matmul[MatMul: MatmulSignature]() raises:
     var end: Int
     var t: Float64 = 0
 
-    for _ in range(100):
+    for _ in range(BenchIters):
         clobber_memory()
 
         start = now()
@@ -75,4 +75,4 @@ fn bench_matmul[MatMul: MatmulSignature]() raises:
 
         memset_zero[Type](res.data, res.Elements)
     
-    print("Average GFlop/s:", t / 100)
+    print("Average GFlop/s:", t / BenchIters)
