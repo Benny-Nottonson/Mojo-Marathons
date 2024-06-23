@@ -39,7 +39,7 @@
 ## 📅 History
 
 <ul>
-  <li><strong>July 2024</strong> - <a href="https://github.com/Benny-Nottonson/Mojo-Marathons/July2024>Matrix Multiplication</a></li>
+  <li><strong>July 2024</strong> - <a href="https://github.com/Benny-Nottonson/Mojo-Marathons/blob/main/July2024/README.md">Matrix Multiplication</a></li>
 </ul>
 
 ## 🏅 Prizes
