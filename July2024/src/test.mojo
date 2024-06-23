@@ -27,7 +27,7 @@ fn basic_matmul[Type: DType, M: Int, N: Int, K: Int, //](inout res: Matrix[Type,
             fn dot[Nelts: Int](n: Int):
                 res.store(m, n, b.load[Nelts](k, n).fma(a_val, res.load[Nelts](m, n)))
 
-            vectorize[dot, Nelts, size=N]()
+            vectorize[dot, simdwidthof[Type](), size=N]()
 
 
 fn test_matmul[MatMul: MatmulSignature]() raises:
