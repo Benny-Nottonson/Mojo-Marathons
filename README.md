@@ -19,7 +19,7 @@
 ## 📜 Rules & Regulations
 
 <p align="center">
-  All final decisions will be made by the community. If a vote is needed, it will be conducted through discussions.
+  All final decisions will be made by Modular, rules may vary each month.
 </p>
 
 ### Current Rules
