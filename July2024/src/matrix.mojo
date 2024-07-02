@@ -1,6 +1,5 @@
 from random import rand
 
-
 struct Matrix[Type: DType, Rows: Int, Cols: Int]:
     alias Elements = Rows * Cols
     var data: DTypePointer[Type]

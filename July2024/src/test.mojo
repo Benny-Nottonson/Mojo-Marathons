@@ -1,5 +1,5 @@
+from benchmark import run, keep, clobber_memory
 from testing import assert_almost_equal
-import benchmark
 from algorithm import vectorize
 from time import now
 
@@ -17,8 +17,7 @@ alias SCENARIOS = List(
     InlineArray[Int, 3](1024, 1024, 512),
 )
 
-
-alias dtypes_to_test = List(
+alias TYPES = List(
     DType.int8,
     DType.int16,
     DType.int32,
@@ -63,53 +62,41 @@ fn test_matmul[MatMul: MatmulSignature]() raises:
 
 fn bench_matmul[MatMul: MatmulSignature]() raises:
     @parameter
-    for i in range(len(dtypes_to_test)):
+    for i in range(len(TYPES)):
 
         @parameter
-        for j in range(1, len(SCENARIOS)):  # skip the first, not interesting
-            alias CurrentDType = dtypes_to_test[i]
-            alias dimensions = SCENARIOS[j]
+        for j in range(1, len(SCENARIOS)):
+            alias DType = TYPES[i]
+            alias Dims = SCENARIOS[j]
 
-            var res = Matrix[CurrentDType, dimensions[0], dimensions[1]]()
-            var a = Matrix[CurrentDType, dimensions[0], dimensions[2]].rand()
-            var b = Matrix[CurrentDType, dimensions[2], dimensions[1]].rand()
+            var res = Matrix[DType, Dims[0], Dims[1]]()
+            var a = Matrix[DType, Dims[0], Dims[2]].rand()
+            var b = Matrix[DType, Dims[2], Dims[1]].rand()
 
             @parameter
-            fn matmul_this():
-                # We don't memset to 0 for benchmarking since it has no influence on the performance
-                # of the matmul operation.
+            fn wrap_matmul():
                 MatMul(res, a, b)
 
-            benchmark.clobber_memory()
-            var report = benchmark.run[matmul_this]()
+            clobber_memory()
+            var report = run[wrap_matmul]()
 
-            keep(res)
-            keep(a)
-            keep(b)
-            var g_ops = Float64(
-                dimensions[0] * dimensions[1] * dimensions[2] * 2
-            ) / 1e9
+            keep(res.data)
+            keep(a.data)
+            keep(b.data)
 
-            var op_type: String
-            if CurrentDType.is_integral():
-                op_type = "I"
-            else:
-                op_type = "F"
+            var g_ops = Float64(Dims[0] * Dims[1] * Dims[2] * 2) / 1e9
+            var op_type = "I" if DType.is_integral() else "F"
 
             print(
                 "Average G"
                 + op_type
                 + "op/s:"
                 + str(g_ops / report.mean(unit="s")),
-                str(CurrentDType),
+                str(DType),
                 "dimensions: M="
-                + str(dimensions[0])
+                + str(Dims[0])
                 + ", N="
-                + str(dimensions[1])
+                + str(Dims[1])
                 + ", K="
-                + str(dimensions[2]),
+                + str(Dims[2]),
             )
-
-
-fn keep(res: Matrix):
-    pass
