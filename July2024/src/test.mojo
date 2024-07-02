@@ -1,8 +1,7 @@
 from testing import assert_almost_equal
-from benchmark import clobber_memory
+import benchmark
 from algorithm import vectorize
 from time import now
-import benchmark
 
 alias SCENARIOS = List(
     InlineArray[Int, 3](1, 1, 1),
@@ -81,6 +80,7 @@ fn bench_matmul[MatMul: MatmulSignature]() raises:
                 # of the matmul operation.
                 MatMul(res, a, b)
 
+            benchmark.clobber_memory()
             var report = benchmark.run[matmul_this]()
 
             keep(res)
