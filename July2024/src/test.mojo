@@ -19,20 +19,31 @@ alias SCENARIOS = List(
 )
 
 
-alias dtypes_to_test = List(DType.int8, DType.int16, DType.int32, DType.int64,DType.float16, DType.float32, DType.float64)
+alias dtypes_to_test = List(
+    DType.int8,
+    DType.int16,
+    DType.int32,
+    DType.int64,
+    DType.float16,
+    DType.float32,
+    DType.float64,
+)
 
 
-fn basic_matmul[Type: DType, M: Int, N: Int, K: Int, //](inout res: Matrix[Type, M, N], a: Matrix[Type, M, K], b: Matrix[Type, K, N]):    
+fn basic_matmul[
+    Type: DType, M: Int, N: Int, K: Int, //
+](inout res: Matrix[Type, M, N], a: Matrix[Type, M, K], b: Matrix[Type, K, N]):
     for m in range(M):
         for k in range(K):
             for n in range(N):
                 res[m, n] += a[m, k] * b[k, n]
 
+
 fn test_matmul[MatMul: MatmulSignature]() raises:
     @parameter
     for i in range(len(SCENARIOS)):
         alias SCENARIO = SCENARIOS[i]
-        
+
         alias M = SCENARIO[0]
         alias N = SCENARIO[1]
         alias K = SCENARIO[2]
@@ -52,12 +63,11 @@ fn test_matmul[MatMul: MatmulSignature]() raises:
 
 
 fn bench_matmul[MatMul: MatmulSignature]() raises:
-
     @parameter
     for i in range(len(dtypes_to_test)):
+
         @parameter
-        for j in range(1, len(SCENARIOS)): # skip the first, not interesting
-    
+        for j in range(1, len(SCENARIOS)):  # skip the first, not interesting
             alias CurrentDType = dtypes_to_test[i]
             alias dimensions = SCENARIOS[j]
 
@@ -76,15 +86,29 @@ fn bench_matmul[MatMul: MatmulSignature]() raises:
             keep(res)
             keep(a)
             keep(b)
-            var g_ops = Float64(dimensions[0] * dimensions[1] * dimensions[2]  * 2) / 1e9
+            var g_ops = Float64(
+                dimensions[0] * dimensions[1] * dimensions[2] * 2
+            ) / 1e9
 
             var op_type: String
             if CurrentDType.is_integral():
                 op_type = "I"
             else:
                 op_type = "F"
-            
-            print("Average G" + op_type + "op/s:" + str(g_ops / report.mean(unit="s")), str(CurrentDType),"dimensions: M=" +  str(dimensions[0]) + ", N=" +  str(dimensions[1]) + ", K=" +  str(dimensions[2]))
+
+            print(
+                "Average G"
+                + op_type
+                + "op/s:"
+                + str(g_ops / report.mean(unit="s")),
+                str(CurrentDType),
+                "dimensions: M="
+                + str(dimensions[0])
+                + ", N="
+                + str(dimensions[1])
+                + ", K="
+                + str(dimensions[2]),
+            )
 
 
 fn keep(res: Matrix):
