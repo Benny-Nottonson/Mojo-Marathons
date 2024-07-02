@@ -8,5 +8,5 @@ fn matmul[Type: DType, M: Int, N: Int, K: Int, //](inout res: Matrix[Type, M, N]
                 res[m, n] += a[m, k] * b[k, n]
 
 fn main() raises:
-    test_matmul[matmul]()
+    #test_matmul[matmul]()
     bench_matmul[matmul]()

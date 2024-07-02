@@ -2,6 +2,7 @@ from testing import assert_almost_equal
 from benchmark import clobber_memory
 from algorithm import vectorize
 from time import now
+import benchmark
 
 alias SCENARIOS = List(
     InlineArray[Int, 3](1, 1, 1),
@@ -55,7 +56,7 @@ fn bench_matmul[MatMul: MatmulSignature]() raises:
     @parameter
     for i in range(len(dtypes_to_test)):
         @parameter
-        for j in range(len(SCENARIOS)):
+        for j in range(1, len(SCENARIOS)): # skip the first, not interesting
     
             alias CurrentDType = dtypes_to_test[i]
             alias dimensions = SCENARIOS[j]
@@ -64,21 +65,27 @@ fn bench_matmul[MatMul: MatmulSignature]() raises:
             var a = Matrix[CurrentDType, dimensions[0], dimensions[2]].rand()
             var b = Matrix[CurrentDType, dimensions[2], dimensions[1]].rand()
 
-            var start: Int
-            var end: Int
-            var t: Float64 = 0
-
-            for _ in range(BenchIters):
-                clobber_memory()
-
-                start = now()
+            @parameter
+            fn matmul_this():
+                # We don't memset to 0 for benchmarking since it has no influence on the performance
+                # of the matmul operation.
                 MatMul(res, a, b)
-                end = now()
 
-                var GFlops = TestSize ** 3 * 2 / (end - start)
-                t += GFlops
-                print("GFlop/s:", GFlops, str(CurrentDType),"dimensions:", str(dimensions[0]), str(dimensions[1]), str(dimensions[2]))
+            var report = benchmark.run[matmul_this]()
 
-                memset_zero[CurrentDType](res.data, res.Elements)
+            keep(res)
+            keep(a)
+            keep(b)
+            var g_ops = Float64(dimensions[0] * dimensions[1] * dimensions[2]  * 2) / 1e9
+
+            var op_type: String
+            if CurrentDType.is_integral():
+                op_type = "I"
+            else:
+                op_type = "F"
             
-            print("Average GFlop/s:", t / BenchIters, str(CurrentDType),"dimensions:", str(dimensions[0]), str(dimensions[1]), str(dimensions[2]))
+            print("Average G" + op_type + "op/s:" + str(g_ops / report.mean(unit="s")), str(CurrentDType),"dimensions: M=" +  str(dimensions[0]) + ", N=" +  str(dimensions[1]) + ", K=" +  str(dimensions[2]))
+
+
+fn keep(res: Matrix):
+    pass
