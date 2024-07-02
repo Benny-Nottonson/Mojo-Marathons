@@ -1,4 +1,4 @@
-from src import Matrix, Type, test_matmul, bench_matmul
+from src import Matrix, test_matmul, bench_matmul
 from algorithm.functional import vectorize, parallelize
 
 
@@ -12,5 +12,5 @@ fn matmul[
 
 
 fn main() raises:
-    # test_matmul[matmul]()
+    test_matmul[matmul]()
     bench_matmul[matmul]()
