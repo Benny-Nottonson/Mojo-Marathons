@@ -18,7 +18,7 @@ alias SCENARIOS = [
 ]
 
 
-#alias DTypesToTest = Tuple[DType.int8, DType.int16, DType.int32, DType.int64, DType.float16, DType.float32, DType.float64]
+alias dtypes_to_test = List[DType](DType.int8, DType.int16, DType.int32, DType.int64,DType.float16, DType.float32, DType.float64)
 
 
 fn basic_matmul[Type: DType, M: Int, N: Int, K: Int, //](inout res: Matrix[Type, M, N], a: Matrix[Type, M, K], b: Matrix[Type, K, N]):    
@@ -51,25 +51,29 @@ fn test_matmul[MatMul: MatmulSignature]() raises:
 
 
 fn bench_matmul[MatMul: MatmulSignature]() raises:
-    var res = Matrix[Type, TestSize, TestSize]()
-    var a = Matrix[Type, TestSize, TestSize].rand()
-    var b = Matrix[Type, TestSize, TestSize].rand()
 
-    var start: Int
-    var end: Int
-    var t: Float64 = 0
+    @parameter
+    for i in range(len(dtypes_to_test)):
+        alias CurrentDType = dtypes_to_test[i]
+        var res = Matrix[CurrentDType, TestSize, TestSize]()
+        var a = Matrix[CurrentDType, TestSize, TestSize].rand()
+        var b = Matrix[CurrentDType, TestSize, TestSize].rand()
 
-    for _ in range(BenchIters):
-        clobber_memory()
+        var start: Int
+        var end: Int
+        var t: Float64 = 0
 
-        start = now()
-        MatMul(res, a, b)
-        end = now()
+        for _ in range(BenchIters):
+            clobber_memory()
 
-        var GFlops = TestSize ** 3 * 2 / (end - start)
-        t += GFlops
-        print("GFlop/s:", GFlops)
+            start = now()
+            MatMul(res, a, b)
+            end = now()
 
-        memset_zero[Type](res.data, res.Elements)
-    
-    print("Average GFlop/s:", t / BenchIters)
+            var GFlops = TestSize ** 3 * 2 / (end - start)
+            t += GFlops
+            print("GFlop/s:", GFlops)
+
+            memset_zero[CurrentDType](res.data, res.Elements)
+        
+        print("Average GFlop/s:", t / BenchIters, str(CurrentDType))
