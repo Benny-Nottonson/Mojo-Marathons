@@ -18,6 +18,9 @@ alias SCENARIOS = [
 ]
 
 
+#alias DTypesToTest = Tuple[DType.int8, DType.int16, DType.int32, DType.int64, DType.float16, DType.float32, DType.float64]
+
+
 fn basic_matmul[Type: DType, M: Int, N: Int, K: Int, //](inout res: Matrix[Type, M, N], a: Matrix[Type, M, K], b: Matrix[Type, K, N]):    
     for m in range(M):
         for k in range(K):
