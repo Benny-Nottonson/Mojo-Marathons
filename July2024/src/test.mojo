@@ -18,17 +18,11 @@ alias SCENARIOS = [
 ]
 
 
-fn basic_matmul[Type: DType, M: Int, N: Int, K: Int, //](inout res: Matrix[Type, M, N], a: Matrix[Type, M, K], b: Matrix[Type, K, N]):
+fn basic_matmul[Type: DType, M: Int, N: Int, K: Int, //](inout res: Matrix[Type, M, N], a: Matrix[Type, M, K], b: Matrix[Type, K, N]):    
     for m in range(M):
         for k in range(K):
-            var a_val = a[m, k]
-
-            @parameter
-            fn dot[Nelts: Int](n: Int):
-                res.store(m, n, b.load[Nelts](k, n).fma(a_val, res.load[Nelts](m, n)))
-
-            vectorize[dot, simdwidthof[Type](), size=N]()
-
+            for n in range(N):
+                res[m, n] += a[m, k] * b[k, n]
 
 fn test_matmul[MatMul: MatmulSignature]() raises:
     @parameter
