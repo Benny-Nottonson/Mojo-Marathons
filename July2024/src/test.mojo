@@ -1,34 +1,48 @@
 from testing import assert_almost_equal
-from benchmark import clobber_memory
+import benchmark
 from algorithm import vectorize
 from time import now
 
-alias SCENARIOS = [
-    StaticIntTuple[3](1, 1, 1),
-    StaticIntTuple[3](1, 47, 97),
-    StaticIntTuple[3](53, 1, 101),
-    StaticIntTuple[3](17, 59, 103),
-    StaticIntTuple[3](1024, 1024, 1024),
-    StaticIntTuple[3](256, 1024, 4096),
-    StaticIntTuple[3](256, 4096, 1024),
-    StaticIntTuple[3](128, 3072, 768),
-    StaticIntTuple[3](1024, 2560, 1024),
-    StaticIntTuple[3](1024, 512, 256),
-    StaticIntTuple[3](1024, 1024, 512),
-]
+alias SCENARIOS = List(
+    InlineArray[Int, 3](1, 1, 1),
+    InlineArray[Int, 3](1, 47, 97),
+    InlineArray[Int, 3](53, 1, 101),
+    InlineArray[Int, 3](17, 59, 103),
+    InlineArray[Int, 3](1024, 1024, 1024),
+    InlineArray[Int, 3](256, 1024, 4096),
+    InlineArray[Int, 3](256, 4096, 1024),
+    InlineArray[Int, 3](128, 3072, 768),
+    InlineArray[Int, 3](1024, 2560, 1024),
+    InlineArray[Int, 3](1024, 512, 256),
+    InlineArray[Int, 3](1024, 1024, 512),
+)
 
 
-fn basic_matmul[Type: DType, M: Int, N: Int, K: Int, //](inout res: Matrix[Type, M, N], a: Matrix[Type, M, K], b: Matrix[Type, K, N]):    
+alias dtypes_to_test = List(
+    DType.int8,
+    DType.int16,
+    DType.int32,
+    DType.int64,
+    DType.float16,
+    DType.float32,
+    DType.float64,
+)
+
+
+fn basic_matmul[
+    Type: DType, M: Int, N: Int, K: Int, //
+](inout res: Matrix[Type, M, N], a: Matrix[Type, M, K], b: Matrix[Type, K, N]):
     for m in range(M):
         for k in range(K):
             for n in range(N):
                 res[m, n] += a[m, k] * b[k, n]
 
+
 fn test_matmul[MatMul: MatmulSignature]() raises:
     @parameter
     for i in range(len(SCENARIOS)):
-        alias SCENARIO = SCENARIOS.get[i, StaticIntTuple[3]]()
-        
+        alias SCENARIO = SCENARIOS[i]
+
         alias M = SCENARIO[0]
         alias N = SCENARIO[1]
         alias K = SCENARIO[2]
@@ -48,25 +62,54 @@ fn test_matmul[MatMul: MatmulSignature]() raises:
 
 
 fn bench_matmul[MatMul: MatmulSignature]() raises:
-    var res = Matrix[Type, TestSize, TestSize]()
-    var a = Matrix[Type, TestSize, TestSize].rand()
-    var b = Matrix[Type, TestSize, TestSize].rand()
+    @parameter
+    for i in range(len(dtypes_to_test)):
 
-    var start: Int
-    var end: Int
-    var t: Float64 = 0
+        @parameter
+        for j in range(1, len(SCENARIOS)):  # skip the first, not interesting
+            alias CurrentDType = dtypes_to_test[i]
+            alias dimensions = SCENARIOS[j]
 
-    for _ in range(BenchIters):
-        clobber_memory()
+            var res = Matrix[CurrentDType, dimensions[0], dimensions[1]]()
+            var a = Matrix[CurrentDType, dimensions[0], dimensions[2]].rand()
+            var b = Matrix[CurrentDType, dimensions[2], dimensions[1]].rand()
 
-        start = now()
-        MatMul(res, a, b)
-        end = now()
+            @parameter
+            fn matmul_this():
+                # We don't memset to 0 for benchmarking since it has no influence on the performance
+                # of the matmul operation.
+                MatMul(res, a, b)
 
-        var GFlops = TestSize ** 3 * 2 / (end - start)
-        t += GFlops
-        print("GFlop/s:", GFlops)
+            benchmark.clobber_memory()
+            var report = benchmark.run[matmul_this]()
 
-        memset_zero[Type](res.data, res.Elements)
-    
-    print("Average GFlop/s:", t / BenchIters)
+            keep(res)
+            keep(a)
+            keep(b)
+            var g_ops = Float64(
+                dimensions[0] * dimensions[1] * dimensions[2] * 2
+            ) / 1e9
+
+            var op_type: String
+            if CurrentDType.is_integral():
+                op_type = "I"
+            else:
+                op_type = "F"
+
+            print(
+                "Average G"
+                + op_type
+                + "op/s:"
+                + str(g_ops / report.mean(unit="s")),
+                str(CurrentDType),
+                "dimensions: M="
+                + str(dimensions[0])
+                + ", N="
+                + str(dimensions[1])
+                + ", K="
+                + str(dimensions[2]),
+            )
+
+
+fn keep(res: Matrix):
+    pass
