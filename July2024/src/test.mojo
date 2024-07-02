@@ -3,22 +3,22 @@ from benchmark import clobber_memory
 from algorithm import vectorize
 from time import now
 
-alias SCENARIOS = [
-    StaticIntTuple[3](1, 1, 1),
-    StaticIntTuple[3](1, 47, 97),
-    StaticIntTuple[3](53, 1, 101),
-    StaticIntTuple[3](17, 59, 103),
-    StaticIntTuple[3](1024, 1024, 1024),
-    StaticIntTuple[3](256, 1024, 4096),
-    StaticIntTuple[3](256, 4096, 1024),
-    StaticIntTuple[3](128, 3072, 768),
-    StaticIntTuple[3](1024, 2560, 1024),
-    StaticIntTuple[3](1024, 512, 256),
-    StaticIntTuple[3](1024, 1024, 512),
-]
+alias SCENARIOS = List(
+    InlineArray[Int, 3](1, 1, 1),
+    InlineArray[Int, 3](1, 47, 97),
+    InlineArray[Int, 3](53, 1, 101),
+    InlineArray[Int, 3](17, 59, 103),
+    InlineArray[Int, 3](1024, 1024, 1024),
+    InlineArray[Int, 3](256, 1024, 4096),
+    InlineArray[Int, 3](256, 4096, 1024),
+    InlineArray[Int, 3](128, 3072, 768),
+    InlineArray[Int, 3](1024, 2560, 1024),
+    InlineArray[Int, 3](1024, 512, 256),
+    InlineArray[Int, 3](1024, 1024, 512),
+)
 
 
-alias dtypes_to_test = List[DType](DType.int8, DType.int16, DType.int32, DType.int64,DType.float16, DType.float32, DType.float64)
+alias dtypes_to_test = List(DType.int8, DType.int16, DType.int32, DType.int64,DType.float16, DType.float32, DType.float64)
 
 
 fn basic_matmul[Type: DType, M: Int, N: Int, K: Int, //](inout res: Matrix[Type, M, N], a: Matrix[Type, M, K], b: Matrix[Type, K, N]):    
@@ -30,7 +30,7 @@ fn basic_matmul[Type: DType, M: Int, N: Int, K: Int, //](inout res: Matrix[Type,
 fn test_matmul[MatMul: MatmulSignature]() raises:
     @parameter
     for i in range(len(SCENARIOS)):
-        alias SCENARIO = SCENARIOS.get[i, StaticIntTuple[3]]()
+        alias SCENARIO = SCENARIOS[i]
         
         alias M = SCENARIO[0]
         alias N = SCENARIO[1]
@@ -54,26 +54,31 @@ fn bench_matmul[MatMul: MatmulSignature]() raises:
 
     @parameter
     for i in range(len(dtypes_to_test)):
-        alias CurrentDType = dtypes_to_test[i]
-        var res = Matrix[CurrentDType, TestSize, TestSize]()
-        var a = Matrix[CurrentDType, TestSize, TestSize].rand()
-        var b = Matrix[CurrentDType, TestSize, TestSize].rand()
+        @parameter
+        for j in range(len(SCENARIOS)):
+    
+            alias CurrentDType = dtypes_to_test[i]
+            alias dimensions = SCENARIOS[j]
 
-        var start: Int
-        var end: Int
-        var t: Float64 = 0
+            var res = Matrix[CurrentDType, dimensions[0], dimensions[1]]()
+            var a = Matrix[CurrentDType, dimensions[0], dimensions[2]].rand()
+            var b = Matrix[CurrentDType, dimensions[2], dimensions[1]].rand()
 
-        for _ in range(BenchIters):
-            clobber_memory()
+            var start: Int
+            var end: Int
+            var t: Float64 = 0
 
-            start = now()
-            MatMul(res, a, b)
-            end = now()
+            for _ in range(BenchIters):
+                clobber_memory()
 
-            var GFlops = TestSize ** 3 * 2 / (end - start)
-            t += GFlops
-            print("GFlop/s:", GFlops)
+                start = now()
+                MatMul(res, a, b)
+                end = now()
 
-            memset_zero[CurrentDType](res.data, res.Elements)
-        
-        print("Average GFlop/s:", t / BenchIters, str(CurrentDType))
+                var GFlops = TestSize ** 3 * 2 / (end - start)
+                t += GFlops
+                print("GFlop/s:", GFlops, str(CurrentDType),"dimensions:", str(dimensions[0]), str(dimensions[1]), str(dimensions[2]))
+
+                memset_zero[CurrentDType](res.data, res.Elements)
+            
+            print("Average GFlop/s:", t / BenchIters, str(CurrentDType),"dimensions:", str(dimensions[0]), str(dimensions[1]), str(dimensions[2]))
