@@ -3,45 +3,25 @@ from testing import assert_almost_equal
 from algorithm import vectorize
 from time import now
 
-alias SCENARIOS = List(
-    InlineArray[Int, 3](1, 1, 1),
-    InlineArray[Int, 3](1, 47, 97),
-    InlineArray[Int, 3](53, 1, 101),
-    InlineArray[Int, 3](17, 59, 103),
-    InlineArray[Int, 3](1024, 1024, 1024),
-    InlineArray[Int, 3](256, 1024, 4096),
-    InlineArray[Int, 3](256, 4096, 1024),
-    InlineArray[Int, 3](128, 3072, 768),
-    InlineArray[Int, 3](1024, 2560, 1024),
-    InlineArray[Int, 3](1024, 512, 256),
-    InlineArray[Int, 3](1024, 1024, 512),
-)
-
-alias TYPES = List(
-    DType.int8,
-    DType.int16,
-    DType.int32,
-    DType.int64,
-    DType.float16,
-    DType.float32,
-    DType.float64,
-)
-
+alias SCENARIOS = [(1,1,1), (1,47,97), (53,1,101), (17,59,103), (1024,1024,1024), (256,1024,4096), (256,4096,1024), (128,3072,768), (1024,2560,1024), (1024,512,256), (1024,1024,512)]
+alias TYPES = [DType.int8, DType.int16, DType.int32, DType.int64, DType.float16, DType.float32, DType.float64]
 
 fn basic_matmul[
     Type: DType, M: Int, N: Int, K: Int, //
 ](inout res: Matrix[Type, M, N], a: Matrix[Type, M, K], b: Matrix[Type, K, N]):
     for m in range(M):
         for k in range(K):
-            for n in range(N):
-                res[m, n] += a[m, k] * b[k, n]
+            var val = a.data[m * K + k]
 
+            fn inner_n[Width: Int](n: Int) capturing:
+               res.data.store(n + m * N, b.data.load[width=Width](n + k * N).fma(val, res.data.load[width=Width](n + m * N)))
 
-fn test_matmul[MatMul: MatmulSignature]() raises:
+            vectorize[inner_n, simdwidthof[Type]() * 2, size=N]()
+
+fn test_matmul[matmul: MatmulSignature]() raises:
     @parameter
     for i in range(len(SCENARIOS)):
-        alias SCENARIO = SCENARIOS[i]
-
+        alias SCENARIO = SCENARIOS.get[i, Tuple[Int, Int, Int]]()
         alias M = SCENARIO[0]
         alias N = SCENARIO[1]
         alias K = SCENARIO[2]
@@ -51,10 +31,10 @@ fn test_matmul[MatMul: MatmulSignature]() raises:
         var a = Matrix[Type, M, K].rand()
         var b = Matrix[Type, K, N].rand()
 
-        MatMul(res, a, b)
+        matmul(res, a, b)
         basic_matmul(correct, a, b)
 
-        for i in range(M * N):
+        for i in range(M * N): 
             assert_almost_equal(res.data[i], correct.data[i], atol=1e-5)
 
         print("✅ Passed test with M =", M, ", N =", N, ", K =", K)
@@ -63,36 +43,39 @@ fn test_matmul[MatMul: MatmulSignature]() raises:
 fn bench_matmul[MatMul: MatmulSignature]() raises:
     @parameter
     for i in range(len(TYPES)):
+        alias Type = TYPES.get[i, DType]()
 
         @parameter
         for j in range(1, len(SCENARIOS)):
-            alias DType = TYPES[i]
-            alias Dims = SCENARIOS[j]
+            alias Dims = SCENARIOS.get[j, Tuple[Int, Int, Int]]()
+            alias M = Dims[0]
+            alias N = Dims[1]
+            alias K = Dims[2]
 
-            var res = Matrix[DType, Dims[0], Dims[1]]()
-            var a = Matrix[DType, Dims[0], Dims[2]].rand()
-            var b = Matrix[DType, Dims[2], Dims[1]].rand()
+            var res = Matrix[Type, M, N]()
+            var a = Matrix[Type, M, K].rand()
+            var b = Matrix[Type, K, N].rand()
 
-            @parameter
-            fn wrap_matmul():
+            fn wrapped_matmul() capturing: 
                 MatMul(res, a, b)
 
             clobber_memory()
-            var report = run[wrap_matmul]()
+
+            var report = run[wrapped_matmul]()
 
             keep(res.data)
             keep(a.data)
             keep(b.data)
 
-            var g_ops = Float64(Dims[0] * Dims[1] * Dims[2] * 2) / 1e9
-            var op_type = "I" if DType.is_integral() else "F"
+            var g_ops = Float64(M * N * K * 2) / 1e9
+            var op_type = "I" if Type.is_integral() else "F"
 
             print(
                 "Average G"
                 + op_type
                 + "op/s:"
                 + str(g_ops / report.mean(unit="s")),
-                str(DType),
+                str(Type),
                 "dimensions: M="
                 + str(Dims[0])
                 + ", N="
