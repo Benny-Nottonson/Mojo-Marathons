@@ -3,8 +3,8 @@ from testing import assert_almost_equal
 from algorithm import vectorize
 from time import now
 
-alias SCENARIOS = [(1,1,1), (1,47,97), (53,1,101), (17,59,103), (1024,1024,1024), (256,1024,4096), (256,4096,1024), (128,3072,768), (1024,2560,1024), (1024,512,256), (1024,1024,512)]
-alias TYPES = [DType.int8, DType.int16, DType.int32, DType.int64, DType.float16, DType.float32, DType.float64]
+alias SCENARIOS = ((1,1,1), (1,47,97), (53,1,101), (17,59,103), (1024,1024,1024), (256,1024,4096), (256,4096,1024), (128,3072,768), (1024,2560,1024), (1024,512,256), (1024,1024,512))
+alias TYPES = (DType.int8, DType.int16, DType.int32, DType.int64, DType.float16, DType.float32, DType.float64)
 
 fn basic_matmul[
     Type: DType, M: Int, N: Int, K: Int, //
@@ -41,9 +41,22 @@ fn test_matmul[matmul: MatmulSignature]() raises:
 
 
 fn bench_matmul[MatMul: MatmulSignature]() raises:
+    print("M, N, K", end=" | ")
+    @parameter
+    for j in range(1, len(SCENARIOS)):
+        alias Dims = SCENARIOS.get[j, Tuple[Int, Int, Int]]()
+        print(Dims[0], Dims[1], Dims[2], end=" | ")
+    print("Average |\n")
+
     @parameter
     for i in range(len(TYPES)):
         alias Type = TYPES.get[i, DType]()
+        var type_str = str(Type)
+        for _ in range(7 - len(type_str)):
+            type_str = type_str + " "
+        print(type_str, end=" | ")
+
+        var total: Float64 = 0
 
         @parameter
         for j in range(1, len(SCENARIOS)):
@@ -68,18 +81,8 @@ fn bench_matmul[MatMul: MatmulSignature]() raises:
             keep(b.data)
 
             var g_ops = Float64(M * N * K * 2) / 1e9
-            var op_type = "I" if Type.is_integral() else "F"
-
-            print(
-                "Average G"
-                + op_type
-                + "op/s:"
-                + str(g_ops / report.mean(unit="s")),
-                str(Type),
-                "dimensions: M="
-                + str(Dims[0])
-                + ", N="
-                + str(Dims[1])
-                + ", K="
-                + str(Dims[2]),
-            )
+            var length = len(str(M)) + len(str(N)) + len(str(K)) + 2
+            var flops = g_ops / report.mean(unit="s")
+            total += flops
+            print(str(flops)[0:length], end=" | ")
+        print(str(total / (len(SCENARIOS) - 1))[0:7], end=" |\n")
