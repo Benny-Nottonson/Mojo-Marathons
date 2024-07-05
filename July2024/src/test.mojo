@@ -1,4 +1,4 @@
-from benchmark import run, keep, clobber_memory
+from benchmark import run, keep, clobber_memory, Report
 from testing import assert_almost_equal
 from algorithm import vectorize
 from time import now
@@ -12,20 +12,23 @@ fn print_system_specs():
     print("CPU: ", end="")
     if is_x86():
         print("x86", end=" ")
-        if has_sse4(): print("SSE4", end=" | ")
-        if has_avx(): print("AVX", end=" | ")
-        if has_avx2(): print("AVX2", end=" | ")
-        if has_avx512f(): print("AVX512", end=" | ")
-        if has_vnni(): print("VNNI", end=" | ")
+        if has_sse4(): print("SSE4", end=" ")
+        if has_avx(): print("AVX", end=" ")
+        if has_avx2(): print("AVX2", end=" ")
+        if has_avx512f(): print("AVX512", end=" ")
+        if has_vnni(): print("VNNI", end=" ")
+        print("", end="| ")
     elif is_apple_silicon():
         print("Apple Silicon", end=" ")
-        if is_apple_m1(): print("M1", end=" | ")
-        elif is_apple_m2(): print("M2", end=" | ")
-        elif is_apple_m3(): print("M3", end=" | ")
+        if is_apple_m1(): print("M1", end=" ")
+        elif is_apple_m2(): print("M2", end=" ")
+        elif is_apple_m3(): print("M3", end=" ")
+        print("", end="| ")
     elif has_neon():
         print("ARM Neon", end=" ")
-        if has_neon_int8_dotprod(): print("DotProd", end=" | ")
-        if has_neon_int8_matmul(): print("I8MM", end=" | ")
+        if has_neon_int8_dotprod(): print("DotProd", end=" ")
+        if has_neon_int8_matmul(): print("I8MM", end=" ")
+        print("", end=" | ")
     print("Cores: Physical =", num_physical_cores(), "- Logical =", num_logical_cores(), "- Performance =", num_performance_cores(), end=" | ")
     print("SIMD width:", simdbitwidth(), "bits", end=" | ")
     print("OS: ", end=" ")
@@ -58,7 +61,7 @@ fn test_matmul[matmul: MatmulSignature]() raises:
             assert_almost_equal(res.data[i], correct.data[i], atol=1e-5)
         print("✅ Passed test with M =", SCENARIO[0], ", N =", SCENARIO[1], ", K =", SCENARIO[2])
 
-fn bench_matmul[MatMul: MatmulSignature]() raises:
+fn bench_matmul[MatMul: MatmulSignature, fast: Bool = False]() raises:
     print_system_specs()
 
     print("M, N, K", end=" | ")
@@ -82,11 +85,31 @@ fn bench_matmul[MatMul: MatmulSignature]() raises:
             @always_inline("nodebug")
             fn wrapped_matmul() capturing: MatMul(res, a, b)
             clobber_memory()
-            var report = run[wrapped_matmul]()
+            var report: Report
+            @parameter
+            if fast:
+                report = run[wrapped_matmul](
+                    num_warmup=5,
+                    max_iters=10,
+                    min_runtime_secs=0.1,
+                    max_runtime_secs=1.0,
+                    max_batch_size=1,
+                )
+            else:
+                report = run[wrapped_matmul](
+                    num_warmup=10,
+                    max_iters=100,
+                    min_runtime_secs=1.0,
+                    max_runtime_secs=5.0,
+                    max_batch_size=1,
+                )
             var flops = Float64(Dims[0] * Dims[1] * Dims[2] * 2) / 1e9 / report.mean(unit="s")
             keep(res.data)
             keep(a.data)
             keep(b.data)
             total += flops
-            print(str(flops)[0:len(str(Dims[0])) + len(str(Dims[1])) + len(str(Dims[2])) + 2], end=" | ")
+            print(str(flops)[0:7], end="")
+            for _ in range(len(str(Dims[0])) + len(str(Dims[1])) + len(str(Dims[2])) + 2 - len(str(flops)[0:7])):
+                print(" ", end="")
+            print(" | ", end="")
         print(str(total / (len(SCENARIOS) | 1))[0:7], end=" |\n")
