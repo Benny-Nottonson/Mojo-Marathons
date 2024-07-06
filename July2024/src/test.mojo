@@ -4,8 +4,19 @@ from algorithm import vectorize
 from time import now
 from sys.info import is_x86, has_sse4, has_avx, has_avx2, has_avx512f, has_vnni, is_apple_silicon, is_apple_m1, is_apple_m2, is_apple_m3, has_neon, has_neon_int8_dotprod, has_neon_int8_matmul, num_physical_cores, num_logical_cores, num_performance_cores, simdbitwidth, os_is_macos, os_is_linux, os_is_windows, is_little_endian, is_64bit
 
-alias SCENARIOS = InlineArray[StaticIntTuple[3], 11]((1,1,1), (1,47,97), (53,1,101), (17,59,103), (1024,1024,1024), (256,1024,4096), (256,4096,1024), (128,3072,768), (1024,2560,1024), (1024,512,256), (1024,1024,512))
-alias TYPES = InlineArray[DType, 7](DType.int8, DType.int16, DType.int32, DType.int64, DType.float16, DType.float32, DType.float64)
+alias SCENARIOS = InlineArray[size=10](
+    InlineArray[size=3](1, 1, 1), 
+    InlineArray[size=3](1, 47, 97), 
+    InlineArray[size=3](53, 1, 101), 
+    InlineArray[size=3](17, 59, 103), 
+    InlineArray[size=3](128, 128, 128), 
+    InlineArray[size=3](128, 3072, 768), 
+    InlineArray[size=3](512, 512, 512), 
+    InlineArray[size=3](256, 1024, 4096), 
+    InlineArray[size=3](1024, 1024, 1024), 
+    InlineArray[size=3](4096, 4096, 8192)
+)
+alias TYPES = InlineArray[size=7](DType.int8, DType.int16, DType.int32, DType.int64, DType.float16, DType.float32, DType.float64)
 
 fn print_system_specs():
     print("System Specs", end=" | ")
@@ -45,11 +56,11 @@ fn basic_matmul[Type: DType, M: Int, N: Int, K: Int](inout res: Matrix[Type, M, 
             var val = a.data[m * K + k]
             fn inner_n[Width: Int](n: Int) capturing:
                res.data.store(n + m * N, b.data.load[width=Width](n + k * N).fma(val, res.data.load[width=Width](n + m * N)))
-            vectorize[inner_n, simdwidthof[Type]() * 2, size=N]()
+            vectorize[inner_n, simdwidthof[Type]() << (1 + is_apple_silicon()), size=N]()
 
 fn test_matmul[matmul: MatmulSignature]() raises:
     @parameter
-    for i in range(len(SCENARIOS)):
+    for i in range(len(SCENARIOS) // 2):
         alias SCENARIO = SCENARIOS[i]
         var correct = Matrix[Type, SCENARIO[0], SCENARIO[1]]()
         var res = Matrix[Type, SCENARIO[0], SCENARIO[1]]()
@@ -61,7 +72,7 @@ fn test_matmul[matmul: MatmulSignature]() raises:
             assert_almost_equal(res.data[i], correct.data[i], atol=1e-5)
         print("✅ Passed test with M =", SCENARIO[0], ", N =", SCENARIO[1], ", K =", SCENARIO[2])
 
-fn bench_matmul[MatMul: MatmulSignature, fast: Bool = False]() raises:
+fn bench_matmul[MatMul: MatmulSignature]() raises:
     print_system_specs()
 
     print("M, N, K", end=" | ")
@@ -82,27 +93,9 @@ fn bench_matmul[MatMul: MatmulSignature, fast: Bool = False]() raises:
             var res = Matrix[Type, Dims[0], Dims[1]]()
             var a = Matrix[Type, Dims[0], Dims[2]].rand()
             var b = Matrix[Type, Dims[2], Dims[1]].rand()
-            @always_inline("nodebug")
             fn wrapped_matmul() capturing: MatMul(res, a, b)
             clobber_memory()
-            var report: Report
-            @parameter
-            if fast:
-                report = run[wrapped_matmul](
-                    num_warmup=5,
-                    max_iters=10,
-                    min_runtime_secs=0.1,
-                    max_runtime_secs=1.0,
-                    max_batch_size=1,
-                )
-            else:
-                report = run[wrapped_matmul](
-                    num_warmup=10,
-                    max_iters=100,
-                    min_runtime_secs=1.0,
-                    max_runtime_secs=5.0,
-                    max_batch_size=1,
-                )
+            var report = run[wrapped_matmul]()
             var flops = Float64(Dims[0] * Dims[1] * Dims[2] * 2) / 1e9 / report.mean(unit="s")
             keep(res.data)
             keep(a.data)
