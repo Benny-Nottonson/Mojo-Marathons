@@ -4,7 +4,7 @@ from algorithm.functional import vectorize, parallelize
 from math import ceil
 from sys.info import is_apple_silicon, num_performance_cores, num_physical_cores
 
-# I have 16 ymm registers supposedly
+# I have 16 ymm registers supposedly (ryzen has 16)
 # R means registers and c means cache
 # cMatrix = mR * nR = (mR * k) * (k * nR)
 
@@ -97,7 +97,7 @@ fn pack_block_b[
         pack_panel_b[NR](b, block_b, nr, kc, j, jn, pk)
 
     var iter = int(ceil(nc / NR))
-    parallelize[p_iter](iter)
+    parallelize[p_iter](iter, NTHREADS)
 
 
 @always_inline
@@ -159,7 +159,7 @@ fn pack_block_a[
         pack_panel_a[MR](a, block_a, mr, kc, i, pk, im)
 
     var iter = int(ceil(mc / MR))
-    parallelize[p_iter](iter)
+    parallelize[p_iter](iter, NTHREADS)
 
 
 fn matmul_2[
@@ -173,7 +173,7 @@ fn matmul_2[
             mul = 4
 
         return simdwidthof[Type]() * mul
-    
+
     alias NR = get_NR()
 
     # kc​×nc block fills the entire L3 cache.
@@ -226,6 +226,21 @@ fn matmul_2[
                                         ),
                                     )
 
+                                    # slower with float 16 (has incorrect results and is slower, linux amd at least)
+                                    # c_buffer.store[width=nelts](
+                                    #     ir * NR + jr,
+                                    #     block_b.data.load[width=nelts](
+                                    #         jc * kc + kr * NR + jr
+                                    #     ).fma(
+                                    #         block_a.data[
+                                    #             ic * kc + kr * MR + ir
+                                    #         ],
+                                    #         c_buffer.load[width=nelts](
+                                    #             ir * NR + jr
+                                    #         ),
+                                    #     )
+                                    # )
+
                             vectorize[v_iter, NR, size=NR, unroll_factor=1]()
 
                         @parameter
@@ -242,10 +257,10 @@ fn matmul_2[
                         vectorize[store_iter, NR](nr)
 
                 var iter = int(ceil(nc / NR))
-                parallelize[p_iter](iter)
+                parallelize[p_iter](iter, NTHREADS)
 
 
 fn main() raises:
-    # 500gflops max for my computer
+    # 550gflops max for my computer (ryzen, 12 threads) with numpy blas
     test_matmul[matmul_2]()
     bench_matmul[matmul_2]()
