@@ -2,6 +2,7 @@ from src import Matrix, test_matmul, bench_matmul
 from algorithm.functional import vectorize, parallelize
 
 from math import ceil
+from sys.info import is_apple_silicon, num_performance_cores, num_physical_cores
 
 # I have 16 ymm registers supposedly
 # R means registers and c means cache
@@ -12,6 +13,8 @@ from math import ceil
 # l1 cache 6 total 192kib, 24,576 float64 elements
 
 # row-major
+
+alias NTHREADS = 6
 
 
 fn matmul[
@@ -162,14 +165,24 @@ fn pack_block_a[
 fn matmul_2[
     Type: DType, M: Int, N: Int, K: Int, //
 ](inout res: Matrix[Type, M, N], a: Matrix[Type, M, K], b: Matrix[Type, K, N]):
-    alias NTHREADS = 6
-
     alias MR = 16
-    alias NR = simdwidthof[Type]() * 2
 
-    alias NC = MR * NTHREADS * 4
-    alias MC = NR * NTHREADS * 32
-    alias KC = 1000
+    fn get_NR() -> Int:
+        var mul = 2
+        if is_apple_silicon():
+            mul = 4
+
+        return simdwidthof[Type]() * mul
+    
+    alias NR = get_NR()
+
+    # kc​×nc block fills the entire L3 cache.
+    # mc​×kc​ block fills the entire L2 cache.
+    # kc​×nR block fills the entire L1 cache.
+
+    alias NC = MR * NTHREADS * 32
+    alias MC = NR * NTHREADS * 4
+    alias KC = 10000
 
     var block_b = Matrix[Type, KC, NC]()
     var block_a = Matrix[Type, MC, KC]()
