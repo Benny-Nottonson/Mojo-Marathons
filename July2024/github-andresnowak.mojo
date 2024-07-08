@@ -26,6 +26,7 @@ fn matmul[
 # --------------
 
 
+@always_inline
 fn pack_panel_b[
     Type: DType,
     K: Int,
@@ -43,14 +44,34 @@ fn pack_panel_b[
     pk: Int,
 ):
     for p in range(kc):
-        for i in range(nr):
-            block_b.data[j * kc + p * NR + i] = b.data[
-                (pk + p) * N + jn + j + i
-            ]
-        for i in range(nr, NR):
-            block_b.data[j * kc + p * NR + i] = 0
+
+        @parameter
+        fn v_iter[nelts: Int](i: Int):
+            block_b.data.store[width=nelts](
+                j * kc + p * NR + i,
+                b.data.load[width=nelts]((pk + p) * N + jn + j + i),
+            )
+
+        # for i in range(nr):
+        #     block_b.data[j * kc + p * NR + i] = b.data[
+        #         (pk + p) * N + jn + j + i
+        #     ]
+        vectorize[v_iter, NR](nr)
+
+        @parameter
+        fn v_iter_2[nelts: Int](i_temp: Int):
+            var i = i_temp + nr
+            block_b.data.store[width=nelts](
+                j * kc + p * NR + i,
+                0,
+            )
+
+        vectorize[v_iter_2, 2](NR - nr)
+        # for i in range(nr, NR):
+        #     block_b.data[j * kc + p * NR + i] = 0
 
 
+@always_inline
 fn pack_block_b[
     Type: DType,
     K: Int,
@@ -76,6 +97,7 @@ fn pack_block_b[
     parallelize[p_iter](iter)
 
 
+@always_inline
 fn pack_panel_a[
     Type: DType,
     M: Int,
@@ -97,10 +119,21 @@ fn pack_panel_a[
             block_a.data[i * kc + p * MR + j] = a.data[
                 (im + i + j) * K + pk + p
             ]
-        for j in range(mr, MR):
-            block_a.data[i * kc + p * MR + j] = 0
+
+        @parameter
+        fn v_iter_2[nelts: Int](j_temp: Int):
+            var j = j_temp + mr
+            block_a.data.store[width=nelts](
+                i * kc + p * MR + j,
+                0,
+            )
+
+        # for j in range(mr, MR):
+        #     block_a.data[i * kc + p * MR + j] = 0
+        vectorize[v_iter_2, 2](MR - mr)
 
 
+@always_inline
 fn pack_block_a[
     Type: DType,
     M: Int,
@@ -161,6 +194,7 @@ fn matmul_2[
                         var mr = min(MR, mc - ic)
 
                         var c_buffer = stack_allocation[MR * NR, Type]()
+                        memset_zero(c_buffer, MR * NR)
 
                         # do the computation
                         for kr in range(kc):
@@ -168,19 +202,31 @@ fn matmul_2[
                             @parameter
                             fn v_iter[nelts: Int](jr: Int):
                                 # for jr in range(nr):
-                                for ir in range(mr):
-                                    res.data.store[width=nelts](
-                                        (i + ic + ir) * N + j + jc + jr,
-                                        res.data.load[width=nelts](
-                                            (i + ic + ir) * N + j + jc + jr
-                                        )
+                                @parameter
+                                for ir in range(MR):
+                                    c_buffer.store[width=nelts](
+                                        ir * NR + jr,
+                                        c_buffer.load[width=nelts](ir * NR + jr)
                                         + block_a.data[ic * kc + kr * MR + ir]
                                         * block_b.data.load[width=nelts](
                                             jc * kc + kr * NR + jr
                                         ),
                                     )
 
-                            vectorize[v_iter, NR](nr)
+                            vectorize[v_iter, NR, size=NR, unroll_factor=1]()
+
+                        @parameter
+                        fn store_iter[nelts: Int](jr: Int):
+                            for ir in range(mr):
+                                res.data.store[width=nelts](
+                                    (i + ic + ir) * N + j + jc + jr,
+                                    res.data.load[width=nelts](
+                                        (i + ic + ir) * N + j + jc + jr
+                                    )
+                                    + c_buffer.load[width=nelts](ir * NR + jr),
+                                )
+
+                        vectorize[store_iter, NR](nr)
 
                 var iter = int(ceil(nc / NR))
                 parallelize[p_iter](iter)
