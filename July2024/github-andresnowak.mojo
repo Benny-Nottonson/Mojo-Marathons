@@ -1,6 +1,8 @@
 from src import Matrix, test_matmul, bench_matmul
 from algorithm.functional import vectorize, parallelize
 
+from math import ceil
+
 # I have 16 ymm registers supposedly
 # R means registers and c means cache
 # cMatrix = mR * nR = (mR * k) * (k * nR)
@@ -10,15 +12,6 @@ from algorithm.functional import vectorize, parallelize
 # l1 cache 6 total 192kib, 24,576 float64 elements
 
 # row-major
-
-alias NTHREADS = 6
-
-alias MR = 16
-alias NR = 8
-
-alias NC = MR * NTHREADS * 4
-alias MC = NR * NTHREADS * 32
-alias KC = 1000
 
 
 fn matmul[
@@ -34,7 +27,12 @@ fn matmul[
 
 
 fn pack_panel_b[
-    Type: DType, K: Int, N: Int, //
+    Type: DType,
+    K: Int,
+    N: Int,
+    KC: Int,
+    NC: Int, //,
+    NR: Int,
 ](
     b: Matrix[Type, K, N],
     inout block_b: Matrix[Type, KC, NC],
@@ -54,7 +52,12 @@ fn pack_panel_b[
 
 
 fn pack_block_b[
-    Type: DType, K: Int, N: Int, //
+    Type: DType,
+    K: Int,
+    N: Int,
+    KC: Int,
+    NC: Int, //,
+    NR: Int,
 ](
     b: Matrix[Type, K, N],
     inout block_b: Matrix[Type, KC, NC],
@@ -63,16 +66,23 @@ fn pack_block_b[
     jn: Int,
     pk: Int,
 ):
-    for j in range(0, nc, NR):
-        # var j = jm * NR
+    @parameter
+    fn p_iter(jmc: Int):
+        var j = jmc * NR
         var nr = min(NR, nc - j)
-        pack_panel_b(b, block_b, nr, kc, j, jn, pk)
+        pack_panel_b[NR](b, block_b, nr, kc, j, jn, pk)
 
-    # parallelize[p_iter](nc // NR, 1)
+    var iter = int(ceil(nc / NR))
+    parallelize[p_iter](iter)
 
 
 fn pack_panel_a[
-    Type: DType, M: Int, K: Int, //
+    Type: DType,
+    M: Int,
+    K: Int,
+    MC: Int,
+    KC: Int, //,
+    MR: Int,
 ](
     a: Matrix[Type, M, K],
     inout block_a: Matrix[Type, MC, KC],
@@ -84,13 +94,20 @@ fn pack_panel_a[
 ):
     for p in range(kc):
         for j in range(mr):
-            block_a.data[i * kc + p * MR + j] = a.data[(im + i + j) * K + pk + p]
+            block_a.data[i * kc + p * MR + j] = a.data[
+                (im + i + j) * K + pk + p
+            ]
         for j in range(mr, MR):
             block_a.data[i * kc + p * MR + j] = 0
 
 
 fn pack_block_a[
-    Type: DType, M: Int, K: Int, //
+    Type: DType,
+    M: Int,
+    K: Int,
+    MC: Int,
+    KC: Int, //,
+    MR: Int,
 ](
     a: Matrix[Type, M, K],
     inout block_a: Matrix[Type, MC, KC],
@@ -99,17 +116,28 @@ fn pack_block_a[
     pk: Int,
     im: Int,
 ):
-    for i in range(0, mc, MR):
-        # var i = imc * MR
+    @parameter
+    fn p_iter(imc: Int):
+        var i = imc * MR
         var mr = min(MR, mc - i)
-        pack_panel_a(a, block_a, mr, kc, i, pk, im)
+        pack_panel_a[MR](a, block_a, mr, kc, i, pk, im)
 
-    # parallelize[p_iter](mc // MR, 1)
+    var iter = int(ceil(mc / MR))
+    parallelize[p_iter](iter)
 
 
 fn matmul_2[
     Type: DType, M: Int, N: Int, K: Int, //
 ](inout res: Matrix[Type, M, N], a: Matrix[Type, M, K], b: Matrix[Type, K, N]):
+    alias NTHREADS = 6
+
+    alias MR = 16
+    alias NR = simdwidthof[Type]() * 2
+
+    alias NC = MR * NTHREADS * 4
+    alias MC = NR * NTHREADS * 32
+    alias KC = 1000
+
     var block_b = Matrix[Type, KC, NC]()
     var block_a = Matrix[Type, MC, KC]()
 
@@ -118,27 +146,45 @@ fn matmul_2[
 
         for p in range(0, K, KC):
             var kc = min(KC, K - p)
-            pack_block_b(b, block_b, kc, nc, j, p)
+            pack_block_b[NR](b, block_b, kc, nc, j, p)
 
             for i in range(0, M, MC):
                 var mc = min(MC, M - i)
-                pack_block_a(a, block_a, mc, kc, p, i)
+                pack_block_a[MR](a, block_a, mc, kc, p, i)
 
-                for jc in range(0, nc, NR):
+                @parameter
+                fn p_iter(jcp: Int):
+                    var jc = jcp * NR
+                    # for jc in range(0, nc, NR):
                     for ic in range(0, mc, MR):
                         var nr = min(NR, nc - jc)
                         var mr = min(MR, mc - ic)
 
+                        var c_buffer = stack_allocation[MR * NR, Type]()
+
+                        # do the computation
                         for kr in range(kc):
-                            for jr in range(nr):
+
+                            @parameter
+                            fn v_iter[nelts: Int](jr: Int):
+                                # for jr in range(nr):
                                 for ir in range(mr):
-                                    res.data[
-                                        (i + ic + ir) * N + j + jc + jr
-                                    ] += block_a.data[
-                                        ic * kc + kr * MR + ir
-                                    ] * block_b.data[
-                                        jc * kc + kr * NR + jr
-                                    ]
+                                    res.data.store[width=nelts](
+                                        (i + ic + ir) * N + j + jc + jr,
+                                        res.data.load[width=nelts](
+                                            (i + ic + ir) * N + j + jc + jr
+                                        )
+                                        + block_a.data[ic * kc + kr * MR + ir]
+                                        * block_b.data.load[width=nelts](
+                                            jc * kc + kr * NR + jr
+                                        ),
+                                    )
+
+                            vectorize[v_iter, NR](nr)
+
+                var iter = int(ceil(nc / NR))
+                parallelize[p_iter](iter)
+
 
 fn main() raises:
     # 500gflops max for my computer
