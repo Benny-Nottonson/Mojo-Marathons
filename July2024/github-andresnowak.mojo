@@ -180,7 +180,8 @@ fn matmul_2[
     # mc​×kc​ block fills the entire L2 cache.
     # kc​×nR block fills the entire L1 cache.
 
-    alias NC = MR * NTHREADS * 32
+
+    alias NC = MR * NTHREADS * 32 # * int(( 1 / (Type.sizeof() / 8)))
     alias MC = NR * NTHREADS * 4
     alias KC = 10000
 
@@ -217,29 +218,30 @@ fn matmul_2[
                                 # for jr in range(nr):
                                 @parameter
                                 for ir in range(MR):
-                                    c_buffer.store[width=nelts](
-                                        ir * NR + jr,
-                                        c_buffer.load[width=nelts](ir * NR + jr)
-                                        + block_a.data[ic * kc + kr * MR + ir]
-                                        * block_b.data.load[width=nelts](
-                                            jc * kc + kr * NR + jr
-                                        ),
-                                    )
-
-                                    # slower with float 16 (has incorrect results and is slower, linux amd at least)
-                                    # c_buffer.store[width=nelts](
-                                    #     ir * NR + jr,
-                                    #     block_b.data.load[width=nelts](
-                                    #         jc * kc + kr * NR + jr
-                                    #     ).fma(
-                                    #         block_a.data[
-                                    #             ic * kc + kr * MR + ir
-                                    #         ],
-                                    #         c_buffer.load[width=nelts](
-                                    #             ir * NR + jr
-                                    #         ),
-                                    #     )
-                                    # )
+                                    if Type == DType.float16 or Type == DType.bfloat16:
+                                        c_buffer.store[width=nelts](
+                                            ir * NR + jr,
+                                            c_buffer.load[width=nelts](ir * NR + jr)
+                                            + block_a.data[ic * kc + kr * MR + ir]
+                                            * block_b.data.load[width=nelts](
+                                                jc * kc + kr * NR + jr
+                                            ),
+                                        )
+                                    else:
+                                    # slower with float 16 (has incorrect results and is slower, linux amd ryzen 3 at least)
+                                        c_buffer.store[width=nelts](
+                                            ir * NR + jr,
+                                            block_b.data.load[width=nelts](
+                                                jc * kc + kr * NR + jr
+                                            ).fma(
+                                                block_a.data[
+                                                    ic * kc + kr * MR + ir
+                                                ],
+                                                c_buffer.load[width=nelts](
+                                                    ir * NR + jr
+                                                ),
+                                            )
+                                        )
 
                             vectorize[v_iter, NR, size=NR, unroll_factor=1]()
 
