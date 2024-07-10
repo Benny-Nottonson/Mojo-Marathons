@@ -10,11 +10,13 @@ alias SCENARIOS = InlineArray[size=10](
     InlineArray[size=3](53, 1, 101), 
     InlineArray[size=3](17, 59, 103), 
     InlineArray[size=3](128, 128, 128), 
-    InlineArray[size=3](128, 3072, 768), 
-    InlineArray[size=3](512, 512, 512), 
-    InlineArray[size=3](256, 1024, 4096), 
-    InlineArray[size=3](1024, 1024, 1024), 
-    InlineArray[size=3](4096, 4096, 8192)
+    InlineArray[size=3](210, 210, 210), 
+    InlineArray[size=3](345, 345, 345), 
+    InlineArray[size=3](565, 565, 565), 
+    InlineArray[size=3](927, 927, 927), 
+    InlineArray[size=3](1522, 1522, 1522),
+    InlineArray[size=3](2497, 2497, 2497),
+    InlineArray[size=3](4096, 4096, 4096),
 )
 alias TYPES = InlineArray[size=7](DType.int8, DType.int16, DType.int32, DType.int64, DType.float16, DType.float32, DType.float64)
 
