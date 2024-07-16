@@ -76,7 +76,7 @@ fn bench_matmul[MatMul: MatmulSignature]() raises:
     print_system_specs()
 
     print("M, N, K", end=" | ")
-    for j in range(1, len(SCENARIOS)):
+    for j in range(len(SCENARIOS)):
         print(SCENARIOS[j][0], SCENARIOS[j][1], SCENARIOS[j][2], end=" | ")
     print("Average |")
 
@@ -88,7 +88,7 @@ fn bench_matmul[MatMul: MatmulSignature]() raises:
         for _ in range(7 - len(str(Type))): print(" ", end="")
         print(" | ", end="")
         @parameter
-        for j in range(1, len(SCENARIOS)):
+        for j in range(len(SCENARIOS)):
             alias Dims = SCENARIOS[j]
             var res = Matrix[Type, Dims[0], Dims[1]]()
             var a = Matrix[Type, Dims[0], Dims[2]].rand()
@@ -96,13 +96,13 @@ fn bench_matmul[MatMul: MatmulSignature]() raises:
             fn wrapped_matmul() capturing: MatMul(res, a, b)
             clobber_memory()
             var report = run[wrapped_matmul]()
-            var flops = Float64(Dims[0] * Dims[1] * Dims[2] * 2) / 1e9 / report.mean(unit="s")
             keep(res.data)
             keep(a.data)
             keep(b.data)
+            var flops = Float64(Dims[0] * Dims[1] * Dims[2] * 2) / report.mean(unit="ns")
             total += flops
             print(str(flops)[0:7], end="")
             for _ in range(len(str(Dims[0])) + len(str(Dims[1])) + len(str(Dims[2])) + 2 - len(str(flops)[0:7])):
                 print(" ", end="")
             print(" | ", end="")
-        print(str(total / (len(SCENARIOS) | 1))[0:7], end=" |\n")
+        print(str(total / len(SCENARIOS))[0:7], end=" |\n")
