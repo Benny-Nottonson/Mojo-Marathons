@@ -180,8 +180,7 @@ fn matmul_2[
     # mc​×kc​ block fills the entire L2 cache.
     # kc​×nR block fills the entire L1 cache.
 
-
-    alias NC = MR * NTHREADS * 32 # * int(( 1 / (Type.sizeof() / 8)))
+    alias NC = MR * NTHREADS * 32  # * int(( 1 / (Type.sizeof() / 8)))
     alias MC = NR * NTHREADS * 4
     alias KC = 10000
 
@@ -218,17 +217,26 @@ fn matmul_2[
                                 # for jr in range(nr):
                                 @parameter
                                 for ir in range(MR):
-                                    if Type == DType.float16 or Type == DType.bfloat16:
+
+                                    @parameter
+                                    if (
+                                        Type == DType.float16
+                                        or Type == DType.bfloat16
+                                    ):
                                         c_buffer.store[width=nelts](
                                             ir * NR + jr,
-                                            c_buffer.load[width=nelts](ir * NR + jr)
-                                            + block_a.data[ic * kc + kr * MR + ir]
+                                            c_buffer.load[width=nelts](
+                                                ir * NR + jr
+                                            )
+                                            + block_a.data[
+                                                ic * kc + kr * MR + ir
+                                            ]
                                             * block_b.data.load[width=nelts](
                                                 jc * kc + kr * NR + jr
                                             ),
                                         )
                                     else:
-                                    # slower with float 16 (has incorrect results and is slower, linux amd ryzen 3 at least)
+                                        # slower with float 16 (has incorrect results and is slower, linux amd ryzen 3 at least)
                                         c_buffer.store[width=nelts](
                                             ir * NR + jr,
                                             block_b.data.load[width=nelts](
@@ -240,7 +248,7 @@ fn matmul_2[
                                                 c_buffer.load[width=nelts](
                                                     ir * NR + jr
                                                 ),
-                                            )
+                                            ),
                                         )
 
                             vectorize[v_iter, NR, size=NR, unroll_factor=1]()
@@ -262,7 +270,125 @@ fn matmul_2[
                 parallelize[p_iter](iter, NTHREADS)
 
 
+fn matmul_3[
+    Type: DType, M: Int, N: Int, K: Int, //
+](inout res: Matrix[Type, M, N], a: Matrix[Type, M, K], b: Matrix[Type, K, N]):
+    # For now matmul_3 is better than matmul_4 and faster than matmul_2 in some cases
+    alias MR = 16
+
+    fn get_NR() -> Int:
+        var mul = 2
+        if is_apple_silicon():
+            mul = 4
+
+        return simdwidthof[Type]() * mul
+
+    alias NR = get_NR()
+
+    @parameter
+    fn p_m(m: Int):
+        # for m in range(M):
+        for k in range(K):
+            var val = a[m, k]
+
+            for n in range(0, N, NR):
+                if N - n < NR:
+                    for nr in range(N - n):
+                        res.data.store(
+                            m * N + n + nr,
+                            res.data.load(m * N + n + nr)
+                            + b.data.load(n + k * N + nr) * val,
+                        )
+                else:
+                    res.data.store(
+                        m * N + n,
+                        res.data.load[width=NR](m * N + n)
+                        + b.data.load[width=NR](k * N + n) * val,
+                    )
+
+    parallelize[p_m](M, NTHREADS)
+
+
+fn matmul_4[
+    Type: DType, M: Int, N: Int, K: Int, //
+](inout res: Matrix[Type, M, N], a: Matrix[Type, M, K], b: Matrix[Type, K, N]):
+    alias MR = 16
+
+    fn get_NR() -> Int:
+        var mul = 2
+        if is_apple_silicon():
+            mul = 4
+
+        return simdwidthof[Type]() * mul
+
+    alias NR = get_NR()
+
+    @parameter
+    fn p_iter_n(n_temp: Int):
+        # for n in range(0, N, NR):
+        var n = n_temp * NR
+        var nr = min(NR, N - n)
+
+        for k in range(K):
+            for m in range(0, M, MR):
+                var mr = min(MR, M - m)
+
+                var c_buffer = stack_allocation[MR * NR, Type]()
+                memset_zero(c_buffer, MR * NR)
+
+                if mr < MR:
+                    for jr in range(mr):
+                        if nr < NR:
+                            for ir in range(nr):
+                                c_buffer.store(
+                                    jr * NR + ir,
+                                    c_buffer.load(jr * NR + ir)
+                                    + a[m + jr, k]
+                                    * b.data.load(k * N + n + ir),
+                                )
+                        else:
+                            c_buffer.store(
+                                jr * NR,
+                                c_buffer.load[width=NR](jr * NR)
+                                + a[m + jr, k]
+                                * b.data.load[width=NR](k * N + n),
+                            )
+                else:
+
+                    @parameter
+                    for jr in range(MR):
+                        if nr < NR:
+                            for ir in range(nr):
+                                c_buffer.store(
+                                    jr * NR + ir,
+                                    c_buffer.load(jr * NR + ir)
+                                    + a[m + jr, k]
+                                    * b.data.load(k * N + n + ir),
+                                )
+                        else:
+                            c_buffer.store(
+                                jr * NR,
+                                c_buffer.load[width=NR](jr * NR)
+                                + a[m + jr, k]
+                                * b.data.load[width=NR](k * N + n),
+                            )
+
+                @parameter
+                fn store_iter[nelts: Int](ir: Int):
+                    for jr in range(mr):
+                        res.data.store(
+                            (m + jr) * N + n + ir,
+                            res.data.load[width=nelts]((m + jr) * N + n + ir)
+                            + c_buffer.load[width=nelts](jr * NR + ir),
+                        )
+
+                vectorize[store_iter, NR](nr)
+
+    var iter = int(ceil(N / NR))
+    parallelize[p_iter_n](iter, NTHREADS)
+
+
 fn main() raises:
     # 550gflops max for my computer (ryzen, 12 threads) with numpy blas
-    test_matmul[matmul_2]()
-    bench_matmul[matmul_2]()
+    test_matmul[matmul_3]()
+    bench_matmul[matmul_3]()
