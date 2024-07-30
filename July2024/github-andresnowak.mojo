@@ -293,12 +293,17 @@ fn matmul_3[
 
             for n in range(0, N, NR):
                 if N - n < NR:
-                    for nr in range(N - n):
+
+                    @parameter
+                    fn nr_iter[nelts: Int](nr: Int):
                         res.data.store(
                             m * N + n + nr,
-                            res.data.load(m * N + n + nr)
-                            + b.data.load(n + k * N + nr) * val,
+                            res.data.load[width=nelts](m * N + n + nr)
+                            + b.data.load[width=nelts](n + k * N + nr)
+                            * val,
                         )
+
+                    vectorize[nr_iter, 4](N - n)
                 else:
                     res.data.store(
                         m * N + n,
@@ -323,69 +328,74 @@ fn matmul_4[
 
     alias NR = get_NR()
 
-    @parameter
-    fn p_iter_n(n_temp: Int):
-        # for n in range(0, N, NR):
-        var n = n_temp * NR
-        var nr = min(NR, N - n)
+    # Tiling is an optimization performed for matmul to increase cache locality. The idea is to keep sub-matrices resident in the cache and increase the reuse. The tile function itself can be written in Mojo as:
 
-        for k in range(K):
-            for m in range(0, M, MR):
-                var mr = min(MR, M - m)
+    # The above will perform 2 dimensional tiling over a 2D iteration space defined to be between ([0,endx],[0,endy])([0,endx​],[0,endy​]). Once we define it above, we can use it within our matmul kernel. For simplicity we choose 4 as the tile height and since we also want to vectorize we use 4 * nelts as the tile width (since we vectorize on the columns).
 
-                var c_buffer = stack_allocation[MR * NR, Type]()
-                memset_zero(c_buffer, MR * NR)
+    alias MC = 256
+    alias NC = 128
 
-                if mr < MR:
-                    for jr in range(mr):
-                        if nr < NR:
-                            for ir in range(nr):
+    for ic in range(0, M, MC):
+        var mc = min(MC, M - ic)
+
+        @parameter
+        fn p_N_iter(jc_temp: Int):
+            var jc = jc_temp * NC
+            # for jc in range(0, N, NC):
+            var nc = min(NC, N - jc)
+
+            for k in range(K):
+                for ir in range(0, mc, MR):
+                    var mr = min(MR, mc - ir)
+
+                    for jr in range(0, nc, NR):
+                        var nr = min(NR, nc - jr)
+
+                        var c_buffer = stack_allocation[MR * NR, Type]()
+                        memset_zero(c_buffer, MR * NR)
+
+                        # for i in range(mr):
+
+                        @parameter
+                        fn nr_iter[nelts: Int](j: Int):
+                            for i in range(mr):
                                 c_buffer.store(
-                                    jr * NR + ir,
-                                    c_buffer.load(jr * NR + ir)
-                                    + a[m + jr, k]
-                                    * b.data.load(k * N + n + ir),
+                                    i * NR + j,
+                                    c_buffer.load[width=nelts](i * NR + j)
+                                    + a.data.load((ic + ir + i) * K + k)
+                                    * b.data.load[width=nelts](
+                                        k * N + jc + jr + j
+                                    ),
                                 )
-                        else:
-                            c_buffer.store(
-                                jr * NR,
-                                c_buffer.load[width=NR](jr * NR)
-                                + a[m + jr, k]
-                                * b.data.load[width=NR](k * N + n),
-                            )
-                else:
 
-                    @parameter
-                    for jr in range(MR):
-                        if nr < NR:
-                            for ir in range(nr):
-                                c_buffer.store(
-                                    jr * NR + ir,
-                                    c_buffer.load(jr * NR + ir)
-                                    + a[m + jr, k]
-                                    * b.data.load(k * N + n + ir),
+                        if nr == NR:
+                            vectorize[nr_iter, NR, size=NR, unroll_factor=1]()
+                        else:
+                            vectorize[nr_iter, 4](nr)
+
+                        # for i in range(mr):
+
+                        @parameter
+                        fn store_iter[nelts: Int](j: Int):
+                            for i in range(mr):
+                                res.data.store[width=nelts](
+                                    (ic + ir + i) * N + jc + jr + j,
+                                    res.data.load[width=nelts](
+                                        (ic + ir + i) * N + jc + jr + j
+                                    )
+                                    + c_buffer.load[width=nelts](i * NR + j),
                                 )
+
+                        if nr == NR:
+                            vectorize[
+                                store_iter, NR, size=NR, unroll_factor=1
+                            ]()
                         else:
-                            c_buffer.store(
-                                jr * NR,
-                                c_buffer.load[width=NR](jr * NR)
-                                + a[m + jr, k]
-                                * b.data.load[width=NR](k * N + n),
-                            )
+                            vectorize[store_iter, 4](nr)
 
-                @parameter
-                fn store_iter[nelts: Int](ir: Int):
-                    for jr in range(mr):
-                        res.data.store(
-                            (m + jr) * N + n + ir,
-                            res.data.load[width=nelts]((m + jr) * N + n + ir)
-                            + c_buffer.load[width=nelts](jr * NR + ir),
-                        )
+        var N_iter = int(ceil(N / NC))
 
-                vectorize[store_iter, NR](nr)
-
-    var iter = int(ceil(N / NR))
-    parallelize[p_iter_n](iter, NTHREADS)
+        parallelize[p_N_iter](N_iter, NTHREADS)
 
 
 fn main() raises:
