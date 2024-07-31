@@ -19,6 +19,7 @@ from sys.info import alignof
 
 alias NTHREADS = 6
 
+
 fn matmul[
     Type: DType, M: Int, N: Int, K: Int, //
 ](inout res: Matrix[Type, M, N], a: Matrix[Type, M, K], b: Matrix[Type, K, N]):
@@ -196,16 +197,17 @@ fn matmul_2[
     # kc​×nc block fills the entire L2 cache.
     # kc​×mR block fills the entire L1 cache.
 
-    alias NC = NR * NTHREADS * 4 
+    alias NC = NR * NTHREADS * 4
     alias MC = MR * NTHREADS * 32  # * int(( 1 / (Type.sizeof() / 8)))
     alias KC = 1000
 
+    @parameter
+    if N * K < NC * KC and M * K < MC * KC:
+        matmul_5(res, a, b)
+        return
+
     var block_b = Matrix[Type, KC, NC]()
     var block_a = Matrix[Type, KC, MC]()
-
-    # if M % MR != 0:
-    #     matmul(res, a, b)
-    #     return
 
     for j in range(0, M, MC):
         var mc = min(MC, M - j)
@@ -221,7 +223,7 @@ fn matmul_2[
                 @parameter
                 fn p_MC_iter(jcr_temp: Int):
                     var jcr = jcr_temp * MR
-                # for jcr in range(0, mc, MR):
+                    # for jcr in range(0, mc, MR):
                     var mr = min(MR, mc - jcr)
 
                     for icr in range(0, nc, NR):
@@ -366,6 +368,7 @@ fn matmul_3[
 
     alias NR = get_NR()
 
+    @always_inline
     @parameter
     fn p_m(m: Int):
         # for m in range(M):
@@ -391,7 +394,11 @@ fn matmul_3[
                         + b.data.load[width=NR](k * N + n) * val,
                     )
 
-    parallelize[p_m](M, NTHREADS)
+    if M * N * K < 1_000_000:
+        for m in range(M):
+            p_m(m)
+    else:
+        parallelize[p_m](M, NTHREADS)
 
 
 fn matmul_4[
@@ -475,6 +482,147 @@ fn matmul_4[
 
         var N_iter = int(ceil(N / NC))
 
+        parallelize[p_N_iter](N_iter, NTHREADS)
+
+
+fn matmul_5[
+    Type: DType, M: Int, N: Int, K: Int, //
+](inout res: Matrix[Type, M, N], a: Matrix[Type, M, K], b: Matrix[Type, K, N]):
+    alias NELTS = simdwidthof[Type]()
+
+    # Normally a cpu has 16 register ymm (ymm = simd), so for the micro kernel we want all the operations to take in the registers.
+    alias MR = 6
+    alias NR = 2 * NELTS  # float 32 = 2 * 8 = 16
+
+    @parameter
+    fn get_NELTS() -> Int:
+        var mul = 2
+        if is_apple_silicon():
+            mul = 4
+
+        var res = simdwidthof[Type]() * mul
+        if res > NR:
+            return NR
+        return res
+
+    alias NELTS_FAST = get_NELTS()
+
+    @always_inline
+    @parameter
+    fn p_N_iter(i_temp: Int):
+        var i = i_temp * NR
+        # for i in range(0, N, NR):
+        var nr = min(NR, N - i)
+
+        for j in range(0, M, MR):
+            var mr = min(MR, M - j)
+
+            @parameter
+            @always_inline
+            fn register_kernel():
+                # alignment with booleans gives incorrect values when loading and storing even when specifying the alignment manually
+                var mask = stack_allocation[
+                    NR * 2, DType.uint8, alignment = alignof[DType.uint8]()
+                ]()
+
+                @parameter
+                for h in range(0, NR, NELTS_FAST):
+                    mask.store[width=NELTS_FAST](h, 1)
+
+                @parameter
+                for h in range(NR, 2 * NR, NELTS_FAST):
+                    mask.store[width=NELTS_FAST](h, 0)
+
+                # c uses 12 registers, 2 N and 6 M (there can be different shapes for the kernel)
+                var c_buffer = stack_allocation[NR * MR, Type]()
+
+                # load values to c_buffer
+                if nr < NR:
+                    for jr in range(mr):
+
+                        @parameter
+                        for ir in range(NR / NELTS):
+                            c_buffer.store(
+                                ir * (MR * NELTS) + jr * NELTS,
+                                masked_load[NELTS](
+                                    res.data.offset(
+                                        (j + jr) * N + i + ir * NELTS
+                                    ),
+                                    mask.load[width=NELTS](
+                                        NR - nr + ir * NELTS
+                                    ).cast[DType.bool](),
+                                    SIMD[Type, NELTS](0),
+                                    alignment=alignof[Type](),
+                                ),
+                            )
+                else:
+                    for jr in range(mr):
+
+                        @parameter
+                        for ir in range(NR / NELTS):
+                            c_buffer.store(
+                                ir * (MR * NELTS) + jr * NELTS,
+                                res.data.load[width=NELTS](
+                                    (j + jr) * N + i + ir * NELTS
+                                ),
+                            )
+
+                for p in range(K):
+                    for jr in range(mr):
+                        # 1 register for a
+                        var a_register = a.data.load((j + jr) * K + p)
+
+                        @parameter
+                        for ir in range(NR / NELTS):
+                            # 2 registers for b
+                            var b_register = b.data.load[width=NELTS](
+                                p * N + i + ir * NELTS
+                            )
+
+                            c_buffer.store(
+                                ir * (MR * NELTS) + jr * NELTS,
+                                c_buffer.load[width=NELTS](
+                                    ir * (MR * NELTS) + jr * NELTS
+                                )
+                                + a_register * b_register,
+                            )
+
+                # store values from c_buffer
+                if nr < NR:
+                    for jr in range(mr):
+
+                        @parameter
+                        for ir in range(NR / NELTS):
+                            masked_store[NELTS](
+                                c_buffer.load[width=NELTS](
+                                    ir * (MR * NELTS) + jr * NELTS
+                                ),
+                                res.data.offset((j + jr) * N + i + ir * NELTS),
+                                mask.load[width=NELTS](
+                                    NR - nr + ir * NELTS
+                                ).cast[DType.bool](),
+                                alignment=alignof[Type](),
+                            )
+                else:
+                    for jr in range(mr):
+
+                        @parameter
+                        for ir in range(NR / NELTS):
+                            res.data.store(
+                                (j + jr) * N + i + ir * NELTS,
+                                c_buffer.load[width=NELTS](
+                                    ir * (MR * NELTS) + jr * NELTS
+                                ),
+                            )
+
+            register_kernel()
+
+    var N_iter = int(ceil(N / NR))
+
+    if M * N * K < 1_000_000:
+        for i in range(N_iter):
+            p_N_iter(i)
+    else:
         parallelize[p_N_iter](N_iter, NTHREADS)
 
 
