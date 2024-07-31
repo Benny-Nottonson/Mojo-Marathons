@@ -19,7 +19,6 @@ from sys.info import alignof
 
 alias NTHREADS = 6
 
-
 fn matmul[
     Type: DType, M: Int, N: Int, K: Int, //
 ](inout res: Matrix[Type, M, N], a: Matrix[Type, M, K], b: Matrix[Type, K, N]):
@@ -168,143 +167,188 @@ fn pack_block_a[
 fn matmul_2[
     Type: DType, M: Int, N: Int, K: Int, //
 ](inout res: Matrix[Type, M, N], a: Matrix[Type, M, K], b: Matrix[Type, K, N]):
+    alias NELTS = simdwidthof[Type]()
+
+    # Normally a cpu has 16 register ymm (ymm = simd), so for the micro kernel we want all the operations to take in the registers.
+    alias MR = 6
+    alias NR = 2 * NELTS  # float 32 = 2 * 8 = 16
+
+    @parameter
     fn get_NELTS() -> Int:
         var mul = 2
         if is_apple_silicon():
             mul = 4
 
-        return simdwidthof[Type]() * mul
+        var res = simdwidthof[Type]() * mul
+        if res > NR:
+            return NR
+        return res
 
-    alias NELTS = simdwidthof[Type]()
+    alias NELTS_FAST = get_NELTS()
 
-    # Normally a cpu has 16 register ymm (ymm = simd)
-    alias MR = 6
-    alias NR = 2 * NELTS  # float 32 = 2 * 8 = 16
-
+    # for column order
     # kc​×nc block fills the entire L3 cache.
     # mc​×kc​ block fills the entire L2 cache.
     # kc​×nR block fills the entire L1 cache.
 
-    alias NC = MR * NTHREADS * 32  # * int(( 1 / (Type.sizeof() / 8)))
-    alias MC = NR * NTHREADS * 4
-    alias KC = 10000
+    # for row order
+    # mc​×kc block fills the entire L3 cache.
+    # kc​×nc block fills the entire L2 cache.
+    # kc​×mR block fills the entire L1 cache.
+
+    alias NC = NR * NTHREADS * 4 
+    alias MC = MR * NTHREADS * 32  # * int(( 1 / (Type.sizeof() / 8)))
+    alias KC = 1000
 
     var block_b = Matrix[Type, KC, NC]()
     var block_a = Matrix[Type, KC, MC]()
 
-    if M % MR != 0:
-        matmul(res, a, b)
-        return
+    # if M % MR != 0:
+    #     matmul(res, a, b)
+    #     return
 
-    # print("sakldjf")
+    for j in range(0, M, MC):
+        var mc = min(MC, M - j)
 
-    for i in range(0, N, NR):
-        var nr = min(NR, N - i)
+        for p in range(0, K, KC):
+            var kc = min(KC, K - p)
+            pack_block_a[MR](a, block_a, mc, kc, p, j)
 
-        for j in range(0, M, MR):
-            var mr = min(MR, M - j)
-
-            @parameter
-            @always_inline
-            fn register_kernel():
-                # alignment with booleans gives incorrect values when loading and storing even when specifying the alignment manually
-                var mask = stack_allocation[
-                    NR * 2, DType.uint8, alignment = alignof[DType.uint8]()
-                ]()
+            for i in range(0, N, NC):
+                var nc = min(NC, N - i)
+                pack_block_b[NR](b, block_b, kc, nc, i, p)
 
                 @parameter
-                for h in range(0, NR, NELTS):
-                    mask.store[width=NELTS](h, 1)
+                fn p_MC_iter(jcr_temp: Int):
+                    var jcr = jcr_temp * MR
+                # for jcr in range(0, mc, MR):
+                    var mr = min(MR, mc - jcr)
 
-                @parameter
-                for h in range(NR, 2 * NR, NELTS):
-                    mask.store[width=NELTS](h, 0)
-
-                # c uses 12 registers, 2 N and 6 M (there can be different shapes for the kernel)
-                var c_buffer = stack_allocation[NR * MR, Type]()
-
-                # load values to c_buffer
-                if nr < NR:
-                    for jr in range(mr):
+                    for icr in range(0, nc, NR):
+                        var nr = min(NR, nc - icr)
 
                         @parameter
-                        for ir in range(NR / NELTS):
-                            c_buffer.store(
-                                ir * (MR * NELTS) + jr * NELTS,
-                                masked_load[NELTS](
-                                    res.data.offset(
-                                        (j + jr) * N + i + ir * NELTS
-                                    ),
-                                    mask.load[width=NELTS](
-                                        NR - nr + ir * NELTS
-                                    ).cast[DType.bool](),
-                                    SIMD[Type, NELTS](0),
-                                    alignment=alignof[Type](),
-                                ),
-                            )
-                else:
-                    for jr in range(mr):
+                        @always_inline
+                        fn register_kernel():
+                            # alignment with booleans gives incorrect values when loading and storing even when specifying the alignment manually
+                            var mask = stack_allocation[
+                                NR * 2,
+                                DType.uint8,
+                                alignment = alignof[DType.uint8](),
+                            ]()
 
-                        @parameter
-                        for ir in range(NR / NELTS):
-                            c_buffer.store(
-                                ir * (MR * NELTS) + jr * NELTS,
-                                res.data.load[width=NELTS](
-                                    (j + jr) * N + i + ir * NELTS
-                                ),
-                            )
+                            @parameter
+                            for h in range(0, NR, NELTS_FAST):
+                                mask.store[width=NELTS_FAST](h, 1)
 
-                for p in range(K):
+                            @parameter
+                            for h in range(NR, 2 * NR, NELTS_FAST):
+                                mask.store[width=NELTS_FAST](h, 0)
 
-                    @parameter
-                    for jr in range(MR):
-                        # 1 register for a
-                        var a_register = a.data.load((j + jr) * K + p)
+                            # c uses 12 registers, 2 N and 6 M (there can be different shapes for the kernel)
+                            var c_buffer = stack_allocation[NR * MR, Type]()
 
-                        @parameter
-                        for ir in range(NR / NELTS):
-                            # 2 registers for b
-                            var b_register = b.data.load[width=NELTS](
-                                p * N + i + ir * NELTS
-                            )
+                            # load values to c_buffer
+                            if nr < NR:
+                                for jr in range(mr):
 
-                            c_buffer.store(
-                                ir * (MR * NELTS) + jr * NELTS,
-                                c_buffer.load[width=NELTS](
-                                    ir * (MR * NELTS) + jr * NELTS
-                                )
-                                + a_register * b_register,
-                            )
+                                    @parameter
+                                    for ir in range(NR / NELTS):
+                                        c_buffer.store(
+                                            ir * (MR * NELTS) + jr * NELTS,
+                                            masked_load[NELTS](
+                                                res.data.offset(
+                                                    (j + jcr + jr) * N
+                                                    + i
+                                                    + icr
+                                                    + ir * NELTS
+                                                ),
+                                                mask.load[width=NELTS](
+                                                    NR - nr + ir * NELTS
+                                                ).cast[DType.bool](),
+                                                SIMD[Type, NELTS](0),
+                                                alignment=alignof[Type](),
+                                            ),
+                                        )
+                            else:
+                                for jr in range(mr):
 
-                # store values from c_buffer
-                if nr < NR:
-                    for jr in range(mr):
+                                    @parameter
+                                    for ir in range(NR / NELTS):
+                                        c_buffer.store(
+                                            ir * (MR * NELTS) + jr * NELTS,
+                                            res.data.load[width=NELTS](
+                                                (j + jcr + jr) * N
+                                                + i
+                                                + icr
+                                                + ir * NELTS
+                                            ),
+                                        )
 
-                        @parameter
-                        for ir in range(NR / NELTS):
-                            masked_store[NELTS](
-                                c_buffer.load[width=NELTS](
-                                    ir * (MR * NELTS) + jr * NELTS
-                                ),
-                                res.data.offset((j + jr) * N + i + ir * NELTS),
-                                mask.load[width=NELTS](
-                                    NR - nr + ir * NELTS
-                                ).cast[DType.bool](),
-                                alignment=alignof[Type](),
-                            )
-                else:
-                    for jr in range(mr):
+                            for pcr in range(kc):
 
-                        @parameter
-                        for ir in range(NR / NELTS):
-                            res.data.store(
-                                (j + jr) * N + i + ir * NELTS,
-                                c_buffer.load[width=NELTS](
-                                    ir * (MR * NELTS) + jr * NELTS
-                                ),
-                            )
+                                @parameter
+                                for jr in range(MR):
+                                    # 1 register for a
+                                    var a_register = block_a.data.load(
+                                        jcr * kc + pcr * MR + jr
+                                    )
 
-            register_kernel()
+                                    @parameter
+                                    for ir in range(NR / NELTS):
+                                        # 2 registers for b
+                                        var b_register = block_b.data.load[
+                                            width=NELTS
+                                        ](icr * kc + pcr * NR + ir * NELTS)
+
+                                        c_buffer.store(
+                                            ir * (MR * NELTS) + jr * NELTS,
+                                            c_buffer.load[width=NELTS](
+                                                ir * (MR * NELTS) + jr * NELTS
+                                            )
+                                            + a_register * b_register,
+                                        )
+
+                            # store values from c_buffer
+                            if nr < NR:
+                                for jr in range(mr):
+
+                                    @parameter
+                                    for ir in range(NR / NELTS):
+                                        masked_store[NELTS](
+                                            c_buffer.load[width=NELTS](
+                                                ir * (MR * NELTS) + jr * NELTS
+                                            ),
+                                            res.data.offset(
+                                                (j + jcr + jr) * N
+                                                + i
+                                                + icr
+                                                + ir * NELTS
+                                            ),
+                                            mask.load[width=NELTS](
+                                                NR - nr + ir * NELTS
+                                            ).cast[DType.bool](),
+                                            alignment=alignof[Type](),
+                                        )
+                            else:
+                                for jr in range(mr):
+
+                                    @parameter
+                                    for ir in range(NR / NELTS):
+                                        res.data.store(
+                                            (j + jcr + jr) * N
+                                            + i
+                                            + icr
+                                            + ir * NELTS,
+                                            c_buffer.load[width=NELTS](
+                                                ir * (MR * NELTS) + jr * NELTS
+                                            ),
+                                        )
+
+                        register_kernel()
+
+                var mc_iter = int(ceil(mc / MR))
+                parallelize[p_MC_iter](mc_iter, NTHREADS)
 
 
 fn matmul_3[
