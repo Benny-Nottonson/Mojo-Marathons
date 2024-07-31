@@ -172,7 +172,8 @@ fn matmul_2[
 
     # Normally a cpu has 16 register ymm (ymm = simd), so for the micro kernel we want all the operations to take in the registers.
     alias MR = 6
-    alias NR = 2 * NELTS  # float 32 = 2 * 8 = 16
+    alias NR_MULTIPLIER = 2
+    alias NR = NR_MULTIPLIER * NELTS  # float 32 = 2 * 8 = 16
 
     @parameter
     fn get_NELTS() -> Int:
@@ -491,8 +492,9 @@ fn matmul_5[
     alias NELTS = simdwidthof[Type]()
 
     # Normally a cpu has 16 register ymm (ymm = simd), so for the micro kernel we want all the operations to take in the registers.
-    alias MR = 6
-    alias NR = 2 * NELTS  # float 32 = 2 * 8 = 16
+    alias MR = 13
+    alias NR_MULTIPLIER = 1
+    alias NR = NR_MULTIPLIER * NELTS  # float 32 = 2 * 8 = 16
 
     @parameter
     fn get_NELTS() -> Int:
