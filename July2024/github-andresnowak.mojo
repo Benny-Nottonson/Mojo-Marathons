@@ -3,7 +3,7 @@ from algorithm.functional import vectorize, parallelize
 
 from math import ceil
 from sys.info import is_apple_silicon, num_performance_cores, num_physical_cores
-from sys.intrinsics import masked_load, masked_store
+from sys.intrinsics import masked_load, masked_store, prefetch, PrefetchOptions
 from memory import memset
 from sys.info import alignof
 
@@ -11,9 +11,9 @@ from sys.info import alignof
 # R means registers and c means cache
 # cMatrix = mR * nR = (mR * k) * (k * nR)
 
-# l3 cache 2 total 32mib, 4,193,750 float64 elements
-# l2 cache 6 total 3mib, 393,250 float64 elements
-# l1 cache 6 total 192kib, 24,576 float64 elements
+# l3 cache 2 total 32mib, 4,193,750 float64 elements, 3 cores have 2_096_875
+# l2 cache 6 total 3mib, 393,250 float64 elements, 1 core has ≈ 65541.66667
+# l1 cache 6 total 192kib, 24,576 float64 elements, 1 core has 4096
 
 # row-major
 
@@ -198,8 +198,9 @@ fn matmul_2[
     # kc​×nc block fills the entire L2 cache.
     # kc​×mR block fills the entire L1 cache.
 
-    alias NC = NR * NTHREADS * 4
-    alias MC = MR * NTHREADS * 32  # * int(( 1 / (Type.sizeof() / 8)))
+
+    alias NC = NR * NTHREADS * 4 # * int((1 / (Type.sizeof() / 8)))
+    alias MC = MR * 6 * 64 # * int(( 1 / (Type.sizeof() / 8)))
     alias KC = 1000
 
     @parameter
@@ -210,16 +211,21 @@ fn matmul_2[
     var block_b = Matrix[Type, KC, NC]()
     var block_a = Matrix[Type, KC, MC]()
 
+    alias prefetch_l3_cache = PrefetchOptions().low_locality().to_data_cache()
+    alias prefetch_l2_cache = PrefetchOptions().medium_locality().to_data_cache()
+
     for j in range(0, M, MC):
         var mc = min(MC, M - j)
 
         for p in range(0, K, KC):
             var kc = min(KC, K - p)
             pack_block_a[MR](a, block_a, mc, kc, p, j)
+            prefetch[prefetch_l3_cache](block_a.data)
 
             for i in range(0, N, NC):
                 var nc = min(NC, N - i)
                 pack_block_b[NR](b, block_b, kc, nc, i, p)
+                prefetch[prefetch_l2_cache](block_b.data)
 
                 @parameter
                 fn p_MC_iter(jcr_temp: Int):
@@ -230,6 +236,7 @@ fn matmul_2[
                     for icr in range(0, nc, NR):
                         var nr = min(NR, nc - icr)
 
+                        # using 2 x nelts for the loads didn't give me better results
                         @parameter
                         @always_inline
                         fn register_kernel():
