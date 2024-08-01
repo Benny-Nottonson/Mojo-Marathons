@@ -17,6 +17,7 @@ from sys.info import alignof
 
 # row-major
 
+# using num_physical_cores or num_performance_cores() gives an error when compiling.
 alias NTHREADS = 6
 
 
