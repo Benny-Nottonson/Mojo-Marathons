@@ -176,7 +176,7 @@ fn matmul[
     alias NELTS = simdwidthof[Type]()
 
     # Normally a cpu has 16 register ymm (ymm = simd), so for the micro kernel we want all the operations to take in the registers. I tried other micro kernel sizes but at least this was the best (and because I don't understand 100% the reason for the shape of micro kernel i don't know what other shape would be better in this case, And i tried lookin in open blas for other sizes, maybe sometimes it is better to use a little bit more registers for the b_matrix?).
-    alias MR = 6
+    alias MR = 12
     alias NR_MULTIPLIER = 2
     alias NR = NR_MULTIPLIER * NELTS  # float 32 = 2 * 8 = 16
 
@@ -371,8 +371,8 @@ fn matmul_2[
     alias NELTS = simdwidthof[Type]()
 
     # Normally a cpu has 16 register ymm (ymm = simd), so for the micro kernel we want all the operations to take in the registers.
-    alias MR = 6
-    alias NR_MULTIPLIER = 2
+    alias MR = 7
+    alias NR_MULTIPLIER = 4
     alias NR = NR_MULTIPLIER * NELTS  # float 32 = 2 * 8 = 16
 
     @parameter
