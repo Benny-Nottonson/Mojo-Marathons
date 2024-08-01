@@ -46,7 +46,7 @@ fn matmul_params[Type: DType]() -> StaticIntTuple[5]:
     alias CType = DType.float32 if is_mixed_precision[Type]() else Type
     alias mc = 8192 // sizeof[Type]()  # fix this for simplicity
     alias N = simdwidthof[CType]()
-    alias Vectors = 32 if has_avx512f() else 16
+    alias Vectors = 32 if has_avx512f() or is_apple_silicon() else 16
 
     @parameter
     fn compute_kc[mr: Int, nr: Int]() -> Int:
