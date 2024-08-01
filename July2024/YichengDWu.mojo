@@ -1,6 +1,6 @@
 from src import Matrix, test_matmul, bench_matmul
 from algorithm.functional import vectorize, parallelize
-from sys import has_avx512f, num_performance_cores
+from sys import has_avx512f, num_performance_cores, is_apple_silicon
 
 alias NUM_THREADS = 6 #  num_performance_cores()
 alias L1_ASSOCIATIVITY = 12
@@ -33,10 +33,14 @@ fn intsqrt[n: Int]() -> Int:
 
 @always_inline("nodebug")
 fn is_mixed_precision[Type: DType]() -> Bool:
-    return (Type == DType.float16 and not has_avx512f()) or (
-        Type == DType.bfloat16
-    )
+    @parameter
+    if Type == DType.bfloat16:
+        return True
 
+    @parameter
+    if Type == DType.float16:
+        return not is_apple_silicon() and not has_avx512f()
+    return False
 
 fn matmul_params[Type: DType]() -> StaticIntTuple[5]:
     alias CType = DType.float32 if is_mixed_precision[Type]() else Type
