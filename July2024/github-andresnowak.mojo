@@ -17,7 +17,7 @@ from sys.info import alignof
 
 # row-major
 
-alias NTHREADS = 8
+alias NTHREADS = 6
 
 
 fn matmul_simple[
@@ -202,8 +202,8 @@ fn matmul[
     # kc​×nc block fills the entire L2 cache.
     # kc​×mR block fills the entire L1 cache.
 
-    alias NC = NR * NTHREADS * 2  # * int((1 / (Type.sizeof() / 8)))
-    alias MC = MR * 4 * 32  # * int(( 1 / (Type.sizeof() / 8)))
+    alias NC = NR * NTHREADS * 4  # * int((1 / (Type.sizeof() / 8)))
+    alias MC = MR * 6 * 64  # * int(( 1 / (Type.sizeof() / 8)))
     alias KC = 1000
 
     @parameter
