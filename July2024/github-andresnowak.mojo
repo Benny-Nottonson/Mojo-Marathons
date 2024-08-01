@@ -18,7 +18,7 @@ from sys.info import alignof
 # row-major
 
 # using num_physical_cores or num_performance_cores() gives an error when compiling.
-alias NTHREADS = 6
+alias NTHREADS = 64
 
 
 fn matmul_simple[
@@ -203,9 +203,9 @@ fn matmul[
     # kc​×nc block fills the entire L2 cache.
     # kc​×mR block fills the entire L1 cache.
 
-    alias NC = NR * NTHREADS * 4  # * int((1 / (Type.sizeof() / 8)))
-    alias MC = MR * 6 * 64  # * int(( 1 / (Type.sizeof() / 8)))
-    alias KC = 1000
+    alias NC = NR * 2 # * int((1 / (Type.sizeof() / 8)))
+    alias MC = MR * 8  # * int(( 1 / (Type.sizeof() / 8)))
+    alias KC = 131_072
 
     @parameter
     if N * K <= 512 * 512 and M * K <= 512 * 512:
