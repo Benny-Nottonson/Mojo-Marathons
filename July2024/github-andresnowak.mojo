@@ -174,7 +174,7 @@ fn matmul[
     # This was implemented based on https://salykova.github.io/matmul-cpu, so this is not novel, this just implements the idea of doing micro kernels, and using the cache with pack_blocks.
     alias NELTS = simdwidthof[Type]()
 
-    # Normally a cpu has 16 register ymm (ymm = simd), so for the micro kernel we want all the operations to take in the registers.
+    # Normally a cpu has 16 register ymm (ymm = simd), so for the micro kernel we want all the operations to take in the registers. I tried other micro kernel sizes but at least this was the best (and because I don't understand 100% the reason for the shape of micro kernel i don't know what other shape would be better in this case, And i tried lookin in open blas for other sizes, maybe sometimes it is better to use a little bit more registers for the b_matrix?).
     alias MR = 6
     alias NR_MULTIPLIER = 2
     alias NR = NR_MULTIPLIER * NELTS  # float 32 = 2 * 8 = 16
@@ -207,7 +207,7 @@ fn matmul[
     alias KC = 1000
 
     @parameter
-    if N * K < NC * KC and M * K < MC * KC:
+    if N * K <= 512 * 512 and M * K <= 512 * 512:
         matmul_2(res, a, b)
         return
 
@@ -387,7 +387,7 @@ fn matmul_2[
 
     alias NELTS_FAST = get_NELTS()
 
-    alias KC = 100
+    alias KC = 1000
 
     # alias prefetch_l3_cache = PrefetchOptions().low_locality().to_data_cache()
     # alias prefetch_l2_cache = PrefetchOptions().medium_locality().to_data_cache()
