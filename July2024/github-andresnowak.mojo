@@ -204,7 +204,7 @@ fn matmul[
     # kc​×mR block fills the entire L1 cache.
 
     alias NC = NR * 2 # * int((1 / (Type.sizeof() / 8)))
-    alias MC = MR * 8  # * int(( 1 / (Type.sizeof() / 8)))
+    alias MC = MR * 4  # * int(( 1 / (Type.sizeof() / 8)))
     alias KC = 131_072
 
     @parameter
