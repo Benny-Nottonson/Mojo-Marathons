@@ -62,7 +62,10 @@ fn pack_panel_b[
         #     block_b.data[j * kc + p * NR + i] = b.data[
         #         (pk + p) * N + jn + j + i
         #     ]
-        vectorize[v_iter, NR](nr)
+        if nr < NR:
+            vectorize[v_iter, 4](nr)
+        else:
+            vectorize[v_iter, NR](nr)
 
         @parameter
         fn v_iter_2[nelts: Int](i_temp: Int):
@@ -168,6 +171,7 @@ fn pack_block_a[
 fn matmul_2[
     Type: DType, M: Int, N: Int, K: Int, //
 ](inout res: Matrix[Type, M, N], a: Matrix[Type, M, K], b: Matrix[Type, K, N]):
+    # This was implemented based on https://salykova.github.io/matmul-cpu, so this is not novel.
     alias NELTS = simdwidthof[Type]()
 
     # Normally a cpu has 16 register ymm (ymm = simd), so for the micro kernel we want all the operations to take in the registers.
@@ -236,7 +240,7 @@ fn matmul_2[
                     for icr in range(0, nc, NR):
                         var nr = min(NR, nc - icr)
 
-                        # using 2 x nelts for the loads didn't give me better results
+                        # using 2 x nelts for the loads and stores in the c_buffer didn't give me better results
                         @parameter
                         @always_inline
                         fn register_kernel():
@@ -409,98 +413,14 @@ fn matmul_3[
         parallelize[p_m](M, NTHREADS)
 
 
-fn matmul_4[
-    Type: DType, M: Int, N: Int, K: Int, //
-](inout res: Matrix[Type, M, N], a: Matrix[Type, M, K], b: Matrix[Type, K, N]):
-    alias MR = 16
-
-    fn get_NR() -> Int:
-        var mul = 2
-        if is_apple_silicon():
-            mul = 4
-
-        return simdwidthof[Type]() * mul
-
-    alias NR = get_NR()
-
-    # Tiling is an optimization performed for matmul to increase cache locality. The idea is to keep sub-matrices resident in the cache and increase the reuse. The tile function itself can be written in Mojo as:
-
-    # The above will perform 2 dimensional tiling over a 2D iteration space defined to be between ([0,endx],[0,endy])([0,endx​],[0,endy​]). Once we define it above, we can use it within our matmul kernel. For simplicity we choose 4 as the tile height and since we also want to vectorize we use 4 * nelts as the tile width (since we vectorize on the columns).
-
-    alias MC = 256
-    alias NC = 128
-
-    for ic in range(0, M, MC):
-        var mc = min(MC, M - ic)
-
-        @parameter
-        fn p_N_iter(jc_temp: Int):
-            var jc = jc_temp * NC
-            # for jc in range(0, N, NC):
-            var nc = min(NC, N - jc)
-
-            for k in range(K):
-                for ir in range(0, mc, MR):
-                    var mr = min(MR, mc - ir)
-
-                    for jr in range(0, nc, NR):
-                        var nr = min(NR, nc - jr)
-
-                        var c_buffer = stack_allocation[MR * NR, Type]()
-                        memset_zero(c_buffer, MR * NR)
-
-                        # for i in range(mr):
-
-                        @parameter
-                        fn nr_iter[nelts: Int](j: Int):
-                            for i in range(mr):
-                                c_buffer.store(
-                                    i * NR + j,
-                                    c_buffer.load[width=nelts](i * NR + j)
-                                    + a.data.load((ic + ir + i) * K + k)
-                                    * b.data.load[width=nelts](
-                                        k * N + jc + jr + j
-                                    ),
-                                )
-
-                        if nr == NR:
-                            vectorize[nr_iter, NR, size=NR, unroll_factor=1]()
-                        else:
-                            vectorize[nr_iter, 4](nr)
-
-                        # for i in range(mr):
-
-                        @parameter
-                        fn store_iter[nelts: Int](j: Int):
-                            for i in range(mr):
-                                res.data.store[width=nelts](
-                                    (ic + ir + i) * N + jc + jr + j,
-                                    res.data.load[width=nelts](
-                                        (ic + ir + i) * N + jc + jr + j
-                                    )
-                                    + c_buffer.load[width=nelts](i * NR + j),
-                                )
-
-                        if nr == NR:
-                            vectorize[
-                                store_iter, NR, size=NR, unroll_factor=1
-                            ]()
-                        else:
-                            vectorize[store_iter, 4](nr)
-
-        var N_iter = int(ceil(N / NC))
-
-        parallelize[p_N_iter](N_iter, NTHREADS)
-
-
 fn matmul_5[
     Type: DType, M: Int, N: Int, K: Int, //
 ](inout res: Matrix[Type, M, N], a: Matrix[Type, M, K], b: Matrix[Type, K, N]):
     alias NELTS = simdwidthof[Type]()
 
     # Normally a cpu has 16 register ymm (ymm = simd), so for the micro kernel we want all the operations to take in the registers.
-    alias MR = 13
-    alias NR_MULTIPLIER = 1
+    alias MR = 6
+    alias NR_MULTIPLIER = 2
     alias NR = NR_MULTIPLIER * NELTS  # float 32 = 2 * 8 = 16
 
     @parameter
@@ -515,6 +435,12 @@ fn matmul_5[
         return res
 
     alias NELTS_FAST = get_NELTS()
+
+    # alias prefetch_l3_cache = PrefetchOptions().low_locality().to_data_cache()
+    # alias prefetch_l2_cache = PrefetchOptions().medium_locality().to_data_cache()
+
+    # prefetch[prefetch_l3_cache](a.data)
+    # prefetch[prefetch_l2_cache](b.data)
 
     @always_inline
     @parameter
