@@ -16,7 +16,22 @@ alias SCENARIOS = InlineArray[size=10](
     InlineArray[size=3](1024, 1024, 1024), 
     InlineArray[size=3](4096, 4096, 8192)
 )
-alias TYPES = InlineArray[size=7](DType.int8, DType.int16, DType.int32, DType.int64, DType.float16, DType.float32, DType.float64)
+alias TYPES = InlineArray[size=8](DType.int8, DType.int16, DType.int32, DType.int64, DType.bfloat16, DType.float16, DType.float32, DType.float64)
+
+
+fn copy[
+    M: Int, N: Int, DstType: DType, SrcType: DType, //
+](inout dst: Matrix[DstType, M, N], src: Matrix[SrcType, M, N]):
+    for i in range(M):
+        for j in range(N):
+            dst.data[i * N + j] = src.data[i * N + j].cast[DstType]()
+
+fn astype[
+    M: Int, N: Int, SrcType: DType, //, DstType: DType
+](src: Matrix[SrcType, M, N]) -> Matrix[DstType, M, N]:
+    var dst = Matrix[DstType, M, N]()
+    copy(dst, src)
+    return dst^
 
 fn print_system_specs():
     print("System Specs", end=" | ")
@@ -62,14 +77,15 @@ fn test_matmul[matmul: MatmulSignature]() raises:
     @parameter
     for i in range(len(SCENARIOS) // 2):
         alias SCENARIO = SCENARIOS[i]
-        var correct = Matrix[Type, SCENARIO[0], SCENARIO[1]]()
+        # The reference result is computed in float32 for better precision
+        var correct = Matrix[DType.float32, SCENARIO[0], SCENARIO[1]]()
         var res = Matrix[Type, SCENARIO[0], SCENARIO[1]]()
         var a = Matrix[Type, SCENARIO[0], SCENARIO[2]].rand()
         var b = Matrix[Type, SCENARIO[2], SCENARIO[1]].rand()
         matmul(res, a, b)
-        basic_matmul(correct, a, b)
+        basic_matmul(correct, astype[DType.float32](a), astype[DType.float32](b))
         for i in range(SCENARIO[0] * SCENARIO[1]): 
-            assert_almost_equal(res.data[i], correct.data[i], atol=1e-5)
+            assert_almost_equal(res.data[i], correct.data[i].cast[Type](), atol=1e-5)
         print("✅ Passed test with M =", SCENARIO[0], ", N =", SCENARIO[1], ", K =", SCENARIO[2])
 
 fn bench_matmul[MatMul: MatmulSignature]() raises:

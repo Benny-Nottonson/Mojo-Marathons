@@ -1,6 +1,6 @@
 from random import rand
 
-struct Matrix[Type: DType, Rows: Int, Cols: Int]:
+struct Matrix[Type: DType, Rows: Int, Cols: Int](Movable):
     alias Elements = Rows * Cols
     var data: DTypePointer[Type]
 
@@ -16,6 +16,9 @@ struct Matrix[Type: DType, Rows: Int, Cols: Int]:
 
     fn __init__(inout self, data: DTypePointer[Type]):
         self.data = data
+
+    fn __moveinit__(inout self, owned other: Self):
+        self.data = other.data
 
     fn __del__(owned self):
         self.data.free()
