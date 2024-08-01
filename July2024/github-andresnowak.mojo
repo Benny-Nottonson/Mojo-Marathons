@@ -203,9 +203,9 @@ fn matmul[
     # kc​×nc block fills the entire L2 cache.
     # kc​×mR block fills the entire L1 cache.
 
-    alias NC = NR * 2 # * int((1 / (Type.sizeof() / 8)))
-    alias MC = MR * 4  # * int(( 1 / (Type.sizeof() / 8)))
-    alias KC = 131_072
+    alias NC = NR * 64 # * int((1 / (Type.sizeof() / 8)))
+    alias MC = MR * 128  # * int(( 1 / (Type.sizeof() / 8)))
+    alias KC = 2048
 
     @parameter
     if N * K <= 512 * 512 and M * K <= 512 * 512:

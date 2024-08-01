@@ -12,9 +12,9 @@ alias MR = 12
 alias NR_MULTIPLIER = 2
 alias NR = NR_MULTIPLIER * NELTS  # float 32 = 2 * 8 = 16
 
-alias NC = NR * 2  # float 32 elements, 8_388_608
-alias MC = MR * 4  # float 32 elements, 6_291_456
-alias KC = 131_072  #(2^17) float 32 elements, 786_432 
+alias NC = NR * 64  # float 32 elements, 4_194_304
+alias MC = MR * 128 # float 32 elements, 3_145_728
+alias KC = 2048  #(2^11) float 32 elements, 24_576 
 
 matmul_2
 
