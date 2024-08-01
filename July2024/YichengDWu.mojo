@@ -3,7 +3,10 @@ from algorithm.functional import vectorize, parallelize
 from sys import has_avx512f, num_performance_cores
 
 alias NUM_THREADS = 6 #  num_performance_cores()
-
+alias L1_ASSOCIATIVITY = 12
+alias L1_CACHE_SIZE = 48 * 1024
+alias L2_ASSOCIATIVITY = 16
+alias L2_CACHE_SIZE = 2 * 1024 * 1024
 
 @always_inline("nodebug")
 fn roundup(a: Int, b: Int) -> Int:
@@ -39,11 +42,6 @@ fn matmul_params[Type: DType]() -> StaticIntTuple[5]:
     alias CType = DType.float32 if is_mixed_precision[Type]() else Type
     alias mc = 8192 // sizeof[Type]()  # fix this for simplicity
     alias N = simdwidthof[CType]()
-    alias L1_ASSOCIATIVITY = 12
-    alias L1_CACHE_SIZE = 48 * 1024
-    alias L2_ASSOCIATIVITY = 16
-    alias L2_CACHE_SIZE = 2 * 1024 * 1024
-
     alias Vectors = 32 if has_avx512f() else 16
 
     @parameter
