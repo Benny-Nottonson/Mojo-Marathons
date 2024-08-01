@@ -1,3 +1,5 @@
+https://en.wikichip.org/wiki/annapurna_labs/graviton/graviton3
+
 I think it has 16 ymm registers, and I think the size is 256 bits for the vectors but maybe it is 128bits
 
 l1_cache = 4mib = 524_288 float64 elements
