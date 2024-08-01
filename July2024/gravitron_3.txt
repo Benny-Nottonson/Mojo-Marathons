@@ -1,0 +1,15 @@
+I think it has 16 ymm registers, and I think the size is 256 bits for the vectors but maybe it is 128bits
+
+l1_cache = 4mib = 524_288 float64 elements
+l2_cache = 64mib = 8_388_608 float64 elements
+l3_cache = 32mib = 4_194_304 float64 elements
+
+NTHREADS = 64
+
+alias MR = 6
+alias NR_MULTIPLIER = 2
+alias NR = NR_MULTIPLIER * NELTS  # float 32 = 2 * 8 = 16
+
+alias NC = NR * 2  # float 32 elements, 8_388_608
+alias MC = MR * 8  # float 32 elements, 6_291_456
+alias KC = 131_072  #(2^17) float 32 elements, 786_432 
