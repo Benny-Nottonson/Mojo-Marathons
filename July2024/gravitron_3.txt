@@ -1,0 +1,23 @@
+https://en.wikichip.org/wiki/annapurna_labs/graviton/graviton3
+
+It seems it has 32 simd registers, and I think the size is 256 bits
+
+l1_cache = 4mib = 524_288 float64 elements
+l2_cache = 64mib = 8_388_608 float64 elements
+l3_cache = 32mib = 4_194_304 float64 elements
+
+NTHREADS = 64
+
+alias MR = 12
+alias NR_MULTIPLIER = 2
+alias NR = NR_MULTIPLIER * NELTS  # float 32 = 2 * 8 = 16
+
+alias NC = NR * 64  # float 32 elements, 4_194_304
+alias MC = MR * 128 # float 32 elements, 3_145_728
+alias KC = 2048  #(2^11) float 32 elements, 24_576 
+
+matmul_2
+
+alias MR = 7
+alias NR_MULTIPLIER = 4
+alias NR = NR_MULTIPLIER * NELTS  # float 32 = 2 * 8 = 16
