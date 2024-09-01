@@ -20,19 +20,6 @@ from sys.info import alignof
 # using num_physical_cores or num_performance_cores() gives an error when compiling.
 alias NTHREADS = 64
 
-
-fn matmul_simple[
-    Type: DType, M: Int, N: Int, K: Int, //
-](inout res: Matrix[Type, M, N], a: Matrix[Type, M, K], b: Matrix[Type, K, N]):
-    for m in range(M):
-        for k in range(K):
-            for n in range(N):
-                res[m, n] += a[m, k] * b[k, n]
-
-
-# --------------
-
-
 @always_inline
 fn pack_panel_b[
     Type: DType,
@@ -59,10 +46,6 @@ fn pack_panel_b[
                 b.data.load[width=nelts]((pk + p) * N + jn + j + i),
             )
 
-        # for i in range(nr):
-        #     block_b.data[j * kc + p * NR + i] = b.data[
-        #         (pk + p) * N + jn + j + i
-        #     ]
         if nr < NR:
             vectorize[v_iter, 4](nr)
         else:
@@ -77,8 +60,6 @@ fn pack_panel_b[
             )
 
         vectorize[v_iter_2, 2](NR - nr)
-        # for i in range(nr, NR):
-        #     block_b.data[j * kc + p * NR + i] = 0
 
 
 @always_inline
@@ -138,8 +119,6 @@ fn pack_panel_a[
                 0,
             )
 
-        # for j in range(mr, MR):
-        #     block_a.data[i * kc + p * MR + j] = 0
         vectorize[v_iter_2, 2](MR - mr)
 
 
@@ -172,10 +151,12 @@ fn pack_block_a[
 fn matmul[
     Type: DType, M: Int, N: Int, K: Int, //
 ](inout res: Matrix[Type, M, N], a: Matrix[Type, M, K], b: Matrix[Type, K, N]):
-    # This was implemented based on https://salykova.github.io/matmul-cpu, so this is not novel, this just implements the idea of doing micro kernels, and using the cache with pack_blocks.
     alias NELTS = simdwidthof[Type]()
 
-    # Normally a cpu has 16 register ymm (ymm = simd), so for the micro kernel we want all the operations to take in the registers. I tried other micro kernel sizes but at least this was the best (and because I don't understand 100% the reason for the shape of micro kernel i don't know what other shape would be better in this case, And i tried lookin in open blas for other sizes, maybe sometimes it is better to use a little bit more registers for the b_matrix?).
+    # Normally a cpu has 16 register ymm (ymm = simd), so for the micro kernel we want all the operations to take in the registers. 
+    # I tried other micro kernel sizes but at least this was the best (and because I don't understand 100% the reason for the shape of micro kernel 
+    # i don't know what other shape would be better in this case, And i tried lookin in open blas for other sizes, maybe sometimes it is better to use a 
+    # little bit more registers for the b_matrix?).
     alias MR = 12
     alias NR_MULTIPLIER = 2
     alias NR = NR_MULTIPLIER * NELTS  # float 32 = 2 * 8 = 16
@@ -234,7 +215,6 @@ fn matmul[
                 @parameter
                 fn p_MC_iter(jcr_temp: Int):
                     var jcr = jcr_temp * MR
-                    # for jcr in range(0, mc, MR):
                     var mr = min(MR, mc - jcr)
 
                     for icr in range(0, nc, NR):
